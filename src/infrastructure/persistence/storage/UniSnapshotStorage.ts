@@ -4,7 +4,7 @@ import type {StoragePort} from './StoragePort'
 import {decodeSnapshot, encodeSnapshot, isMissing} from '../serialization/SnapshotCodec'
 import {readLegacySnapshot} from '../migration/LegacySnapshotReader'
 
-export const SNAPSHOT_KEY = 'buffet-state-v3'
+export const SNAPSHOT_KEY = 'buffet-state-v4'
 
 /** 单键读写保持不变；格式校验与旧键读取各自独立。 */
 export class UniSnapshotStorage implements SnapshotPersistence {
@@ -12,7 +12,8 @@ export class UniSnapshotStorage implements SnapshotPersistence {
 
     load(): SnapshotDocument {
         try {
-            const saved = this.storage.getStorageSync(SNAPSHOT_KEY)
+            const current = this.storage.getStorageSync(SNAPSHOT_KEY)
+            const saved = isMissing(current) ? this.storage.getStorageSync('buffet-state-v3') : current
             return isMissing(saved) ? readLegacySnapshot(this.storage) : decodeSnapshot(saved)
         } catch {
             throw new Error('读取用餐数据失败，请重试；原有记录已保留')

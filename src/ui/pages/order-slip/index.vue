@@ -1,7 +1,7 @@
 <template>
   <view class="order-page">
     <initialization-gate>
-    <view class="notebook">
+    <view v-if="!roomStore.view.snapshot || isHost" class="notebook">
       <view class="rings">
         <view v-for="number in 9" :key="number" class="ring"/>
       </view>
@@ -18,7 +18,8 @@
       </view>
       <view class="paper-rule"/>
       <text class="order-note">辛苦了！希望菜品能尽快上齐，感激不尽！ 🌟</text>
-      <view class="order-done flex-center" @tap="completeRound">点单完毕！</view>
+      <view v-if="!roomStore.view.snapshot || isHost" class="order-done flex-center" @tap="completeRound">点单完毕！</view>
+      <text v-else class="order-note">只有房主可以给 Waiter 看菜单并提交本轮</text>
     </view>
   </initialization-gate>
   </view>
@@ -26,28 +27,46 @@
 
 <script setup lang="ts">
 import InitializationGate from '@/ui/components/initialization-gate/initialization-gate.vue'
-import {ref, watch} from 'vue'
+import {computed, ref, watch} from 'vue'
 import {useApplicationStore} from '@/ui/stores/useApplicationStore'
-import {onLoad} from '@dcloudio/uni-app'
+import {onLoad, onShow, onHide} from '@dcloudio/uni-app'
 import {CommitRoundInput} from '@/contexts/dining/public'
 import {currentDate, currentTime} from '@/utils/format'
 import {useRequired} from '@/ui/composables/useRequired'
 import {runAction} from '@/ui/composables/runAction'
 import {BuffetNavigation} from '@/ui/navigation/BuffetNavigation'
+import {RoomInput} from '@/contexts/dining/public'
+import {useRoomStore} from '@/ui/stores/useRoomStore'
+import {useActiveDining, useRoomConnection} from '@/ui/composables/useActiveDining'
 
 const navigation = useRequired<BuffetNavigation>(BuffetNavigation)
 const applicationStore = useApplicationStore()
-import {useDiningStore} from '@/ui/stores/useDiningStore'
-
-const diningStore = useDiningStore()
+const diningStore = useActiveDining()
+const roomStore = useRoomStore(), restoreRoom = useRoomConnection()
+const roomInput = useRequired<RoomInput>(RoomInput.Token)
+const isHost = computed(() => roomStore.view.snapshot?.hostId === roomStore.view.memberId)
+const visible = ref(false), openingResult = ref(false)
+async function openFinalResult() {
+  if (openingResult.value) return
+  openingResult.value = true
+  try {await navigation.toResult()} catch (error) {openingResult.value = false; throw error}
+}
 const commit = useRequired<CommitRoundInput>(CommitRoundInput.Token)
 const date = ref(currentDate())
 const time = ref(currentTime())
 const submitting = ref(false)
 function checkSelection() {
-  if (applicationStore.ready && !diningStore.view.selectedLines.length) return runAction(() => navigation.open('menu', 'replace'))
+  if (!applicationStore.ready) return
+  return runAction(async () => {
+    try {await restoreRoom()} catch (error) {if (!roomStore.view.snapshot) throw error}
+    if (roomStore.view.snapshot?.status === 'ended') await openFinalResult()
+    else if ((roomStore.view.snapshot && !isHost.value) || !diningStore.view.selectedLines.length) await navigation.open('menu', 'replace')
+  })
 }
 onLoad(() => { void checkSelection() })
+onShow(() => {visible.value = true; openingResult.value = false; void checkSelection()})
+onHide(() => {visible.value = false})
+watch(() => roomStore.view.snapshot?.status, status => {if (status === 'ended' && visible.value) void runAction(openFinalResult)})
 watch(() => applicationStore.ready, initialized => { if (initialized) void checkSelection() })
 
 function completeRound() {
@@ -55,6 +74,14 @@ function completeRound() {
   void runAction(async () => {
     submitting.value = true
     try {
+      if (roomStore.view.snapshot) {
+        if (!isHost.value) throw new Error('只有房主可以提交本轮')
+        if (!diningStore.view.selectedLines.length) {await navigation.back('menu'); return}
+        await roomInput.execute({command: 'commitRound', params: {restaurantId: diningStore.view.session.restaurantId, expectedRevision: roomStore.view.snapshot.revision}})
+        uni.showToast({title: '本轮已记录', icon: 'none'})
+        await navigation.back('menu')
+        return
+      }
       const response = commit.execute({})
       if (response.committed) uni.showToast({title: '第 ' + response.roundCount + ' 轮已记录', icon: 'none'})
       await navigation.back('menu')

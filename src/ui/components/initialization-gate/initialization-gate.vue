@@ -2,7 +2,7 @@
   <slot v-if="applicationStore.view.status === 'ready'"/>
   <view v-else class="initialization-state">
     <text>{{ applicationStore.view.status === 'error' ? applicationStore.view.message : '正在读取用餐数据…' }}</text>
-    <button v-if="applicationStore.view.status === 'error'" size="mini" @tap="retry">重新读取</button>
+    <button :hover-stay-time="0" v-if="applicationStore.view.status === 'error'" size="mini" @tap="retry">重新读取</button>
   </view>
 </template>
 

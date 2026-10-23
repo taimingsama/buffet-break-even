@@ -1,4 +1,5 @@
 export interface ProductView {
+    unit?: string
     id: string;
     name: string;
     category: string;

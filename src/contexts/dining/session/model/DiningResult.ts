@@ -12,7 +12,7 @@ export class DiningResult {
     private readonly history: SavedRound[]
 
     private constructor(public readonly id: string, public readonly restaurant: string, public readonly date: string,
-                        public readonly price: number, public readonly value: number, lines: SavedLine[], rounds: SavedRound[]) {
+                        public readonly price: number, public readonly value: number, lines: SavedLine[], rounds: SavedRound[], private readonly metadata: {restaurantId?: string; typeId?: string; typeName?: string} = {}) {
         this.details = lines.map(line => ({...line}))
         this.history = rounds.map(round => DiningRound.restore(round).toSnapshot())
     }
@@ -28,12 +28,12 @@ export class DiningResult {
         rounds.forEach(round => round.lines.forEach(add))
         pending.forEach(({product, count}) => add({name: product.name, price: product.price, count}))
         return new DiningResult(session.id, session.restaurant, date, session.ticketPrice,
-            sumMoney([session.committedValue, DiningRound.valueOf(pending)]), [...lines.values()], rounds)
+            sumMoney([session.committedValue, DiningRound.valueOf(pending)]), [...lines.values()], rounds, {restaurantId: session.restaurantId, typeId: session.catalog?.typeId, typeName: session.catalog?.typeName})
     }
 
     toSnapshot(): DiningResultSnapshot {
         return {
-            id: this.id,
+            ...this.metadata, id: this.id,
             restaurant: this.restaurant,
             date: this.date,
             price: this.price,
@@ -42,6 +42,10 @@ export class DiningResult {
             rounds: this.rounds
         }
     }
+
+    get restaurantId() {return this.metadata.restaurantId}
+    get typeId() {return this.metadata.typeId}
+    get typeName() {return this.metadata.typeName}
 
     get lines(): SavedLine[] {
         return this.details.map(line => ({...line}))

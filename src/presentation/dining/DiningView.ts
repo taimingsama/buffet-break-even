@@ -1,3 +1,4 @@
+import type {DiningCatalog} from '@/utils/restaurant-catalog'
 import type {ProductLineView} from './ProductLineView'
 import type {ReceiptRoundView} from '../receipt/ReceiptRoundView'
 import type {BreakEvenView} from '../shared/BreakEvenView'
@@ -11,6 +12,7 @@ export interface DiningView {
 export namespace DiningView {
     export interface ViewModel {
         session: {
+            catalog?: DiningCatalog; restaurantId?: string; hasAnyDraft?: boolean;
             active: boolean;
             id: string;
             ticketPrice: number;

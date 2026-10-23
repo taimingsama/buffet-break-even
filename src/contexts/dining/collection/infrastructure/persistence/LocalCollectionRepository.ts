@@ -16,7 +16,8 @@ export class LocalCollectionRepository implements CollectionReader, CollectionSa
         const receipts = this.findAll()
         const index = receipts.findIndex(item => item.id === receipt.id)
         const stored = {
-            id: receipt.id, restaurant: receipt.restaurant, date: receipt.date, price: receipt.price, value: receipt.value,
+            ...(receipt.participants ? {participants: [...receipt.participants]} : {}),
+            restaurantId: receipt.restaurantId, typeId: receipt.typeId, typeName: receipt.typeName, id: receipt.id, restaurant: receipt.restaurant, date: receipt.date, price: receipt.price, value: receipt.value,
             lines: receipt.lines.map(({name, count, price}) => ({name, count, price})),
             rounds: receipt.rounds.map(({time, value, lines}) => ({
                 time, value, lines: lines.map(({name, count, price}) => ({name, count, price}))

@@ -3,7 +3,7 @@
     <view class="progress-row">
       <view>
         <text class="current-money">¥{{ formattedValue }}</text>
-        <text class="target-money"> / ¥{{ target }}</text>
+        <text class="target-money" :class="{editable: editable}" @tap="editable && $emit('edit-price')"> / ¥{{ target }}{{ editable ? ' ✎' : '' }}</text>
       </view>
       <text class="percent">{{ percent }}%</text>
     </view>
@@ -11,6 +11,7 @@
       <view class="progress-fill" :style="{ width: `${fillPercent}%` }"/>
       <view class="break-even-marker"/>
     </view>
+    <slot name="before-tip"/>
     <text v-if="activeTip" class="progress-tip" :style="{ color: activeTip.color }">{{ activeTip.text }}</text>
   </view>
 </template>
@@ -30,9 +31,11 @@ const props = withDefaults(defineProps<{
   target: number
   percent: number
   tips?: ProgressTip[]
+  editable?: boolean
 }>(), {
   tips: () => []
 })
+defineEmits<{(event: 'edit-price'): void}>()
 
 const formattedValue = computed(() => formatPrice(props.value))
 const percent = computed(() => props.percent)
@@ -49,8 +52,9 @@ const activeTip = computed(() => {
 </script>
 
 <style scoped>
+.target-money.editable {color:#a47857;cursor:pointer}
 .progress-panel {
-  padding: 18rpx 24rpx 26rpx;
+  padding: var(--menu-section-gap, 24rpx) var(--menu-gutter, 24rpx) 0;
 }
 
 .progress-row {
@@ -60,13 +64,14 @@ const activeTip = computed(() => {
 }
 
 .current-money {
-  font-size: 58rpx;
+  font-size: 80rpx;
+  line-height: 1.15;
   color: #ff6432;
   font-weight: 900;
 }
 
 .target-money {
-  font-size: 32rpx;
+  font-size: 36rpx;
   color: #aaa;
   font-weight: 700;
 }
@@ -77,7 +82,7 @@ const activeTip = computed(() => {
 }
 
 .progress-track {
-  margin-top: 24rpx;
+  margin-top: var(--menu-section-gap, 24rpx);
   height: 22rpx;
   border-radius: 20rpx;
   background: #ffe1b6;
@@ -107,7 +112,7 @@ const activeTip = computed(() => {
 
 .progress-tip {
   display: block;
-  margin: 24rpx 22rpx 0;
+  margin: var(--menu-section-gap, 24rpx) 0 0;
   font-size: 26rpx;
   font-weight: 800;
 }

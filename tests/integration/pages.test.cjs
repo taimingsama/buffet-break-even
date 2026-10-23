@@ -13,19 +13,22 @@ const root = path.resolve(__dirname, '../../src')
 function harness(options = {}) {
   const cache = new Map()
   const services = new Map()
-  const hooks = { onLoad: [], onShow: [] }
+  const hooks = { onLoad: [], onShow: [], onHide: [], onUnload: [] }
   const toasts = []
+  const modals = []
   const navigation = []
   const storage = new Map()
   const platform = {
     getStorageSync: key => { if (options.failRead?.()) throw Error('unavailable'); return storage.get(key) },
     setStorageSync: (key, value) => storage.set(key, JSON.parse(JSON.stringify(value))),
     showToast: options => toasts.push(options.title),
-    showModal: options => options.success({ confirm: true }),
+    showModal: options => {modals.push(options.title); options.success({ confirm: true })},
     getSystemInfoSync: () => ({ statusBarHeight: 0 }), upx2px: value => value
   }
   function load(file) {
     file = path.resolve(root, file)
+    if (fs.existsSync(path.join(file, 'index.ts'))) file = path.join(file, 'index.ts')
+    if (file.endsWith('.json')) return JSON.parse(fs.readFileSync(file, 'utf8'))
     if (!path.extname(file)) file += '.ts'
     if (cache.has(file)) return cache.get(file).exports
     const module = { exports: {} }
@@ -35,11 +38,11 @@ function harness(options = {}) {
       const descriptor = parse(source, { filename: file }).descriptor
       source = compileScript(descriptor, { id: file }).content
     }
-    const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } })
-    vm.runInNewContext(outputText, { module, exports: module.exports, uni: platform,
+    const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } })
+    vm.runInNewContext(outputText, { module, exports: module.exports, uni: platform, Error,
       require(name) {
         if (name === 'vue') return { ...vue, inject: token => services.get(token) }
-        if (name === '@dcloudio/uni-app') return { onLoad: callback => hooks.onLoad.push(callback), onShow: callback => hooks.onShow.push(callback) }
+        if (name === '@dcloudio/uni-app') return { onLoad: callback => hooks.onLoad.push(callback), onShow: callback => hooks.onShow.push(callback), onHide: callback => hooks.onHide.push(callback), onUnload: callback => hooks.onUnload.push(callback) }
         if (name.endsWith('.vue')) return { default: {} }
         if (name.startsWith('@/')) return load(name.slice(2))
         if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name))
@@ -52,15 +55,387 @@ function harness(options = {}) {
   setActivePinia(pinia)
   const store = load('ui/stores/useDiningStore').useDiningStore(pinia)
   load('ui/composition/registerApplication').registerApplication({ provide: (token, service) => services.set(token, service) }, pinia)
-  const nav = Object.fromEntries(['open', 'toOrderSlip', 'toResult', 'toRecord', 'back'].map(method => [method, async (...args) => { navigation.push([method, ...args]) }]))
+  const nav = Object.fromEntries(['open', 'toOrderSlip', 'toResult', 'toRecord', 'toCustomMenu', 'toCustomDining', 'toMenuPreview', 'back'].map(method => [method, async (...args) => { navigation.push([method, ...args]) }]))
   services.set(load('ui/navigation/BuffetNavigation').BuffetNavigation, nav)
   const bootstrap = services.get(load('ui/composition/ApplicationBootstrap').ApplicationBootstrap.Token)
   bootstrap.initialize()
-  return { store, bootstrap, status: load('ui/stores/useApplicationStore').useApplicationStore(pinia), history: load('ui/stores/useHistoryStore').useHistoryStore(pinia), collection: load('ui/stores/useCollectionStore').useCollectionStore(pinia), navigation, toasts, hooks,
+  const room = load('ui/stores/useRoomStore').useRoomStore(pinia)
+  const profile = load('ui/stores/useProfileStore').useProfileStore(pinia)
+  return { store, room, profile, storage, bootstrap, status: load('ui/stores/useApplicationStore').useApplicationStore(pinia), history: load('ui/stores/useHistoryStore').useHistoryStore(pinia), collection: load('ui/stores/useCollectionStore').useCollectionStore(pinia), navigation, toasts, hooks,
+    modals,
+    stubRoom(execute) {services.set(load('contexts/dining/room/public').RoomInput.Token, {execute})},
+    presentRoom(snapshot, memberId = 'host-1') {
+      const products = services.get(load('contexts/catalog/public').GetCatalogInput.Token).execute({}).products
+        .map(product => ({...product, ...load('presentation/dining/productAppearance').productAppearance(product.id)}))
+      new (load('contexts/dining/room/infrastructure/presentation/RoomPresenter').RoomPresenter)(room, products).present(snapshot, memberId, 'online', '', false, true, false, services.get(load('contexts/catalog/public').GetCatalogInput.Token).execute({typeId: 'sukiyaki'}).catalog, 'niuniu')
+    },
     page: file => load(`ui/pages/${file}/index.vue`).default.setup({}, { expose: () => {} }),
-    input: name => services.get(load('contexts/' + ({ CompleteDining: 'dining/completion', DeleteRecord: 'dining/history', DeleteReceipt: 'dining/collection', GetMenu: 'catalog' }[name] || 'dining/session') + '/public')[name + 'Input'].Token) }
+    input: name => services.get(load('contexts/' + ({ CompleteDining: 'dining/completion', DeleteRecord: 'dining/history', DeleteReceipt: 'dining/collection', GetMenu: 'catalog', GetCatalog: 'catalog', EditCatalog: 'catalog' }[name] || 'dining/session') + '/public')[name + 'Input'].Token) }
 }
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); await vue.nextTick() }
+const settle = async () => {for (let i = 0; i < 6; i++) await flush()}
+const roomSnapshot = (extra = {}) => ({id: 'shared-room-1', code: '123456', revision: 7, hostId: 'host-1', status: 'active',
+  ticketPrice: 288, typeId: 'sukiyaki', drafts: {niuniu: {selected: {'niuniu-p1-1': 2}, rounds: []}}, members: [{id: 'host-1', nickname: '团长', online: true}], receipt: null, ...extra})
+
+test('setup 滚筒选中种类用于新用餐，创造者和我的餐厅分为独立入口', async () => {
+  const app=harness(),setup=app.page('setup')
+  setup.drum.choose(3)
+  assert.equal(setup.typeId.value,'hotpot')
+  setup.start('单人')
+  await settle()
+  assert.equal(app.store.view.session.catalog.typeId,'hotpot')
+  setup.editMenus()
+  await settle()
+  assert.deepEqual(app.navigation.at(-1),['open','creator'])
+  setup.openMyRestaurants()
+  await settle()
+  assert.equal(setup.typeId.value,'my-restaurants')
+  assert.ok(setup.cuisineTypes.some(t=>t.id==='creator'))
+  assert.ok(setup.cuisineTypes.some(t=>t.id==='my-restaurants'))
+  assert.equal(setup.cuisineTypes.some(t=>t.id==='custom'),false)
+})
+
+test('新建餐厅编辑、预览不提前保存，保存后同时出现在创造者和我的餐厅，可用于用餐', async () => {
+  const app=harness(),editor=app.page('custom-menu')
+  editor.restaurant.value.name='我的私厨'
+  editor.editProduct()
+  editor.form.value.name='鲜切牛肉'; editor.form.value.price='12.5'
+  await editor.applyForm()
+  await editor.previewRestaurant(editor.restaurant.value)
+  assert.equal(app.navigation.at(-1)[0],'toMenuPreview')
+  assert.equal(editor.restaurant.value.products[0].unit,'份')
+  assert.equal(app.input('GetCatalog').execute({typeId:'custom'}).catalog.restaurants.length,0)
+  const id=editor.restaurant.value.id
+  await editor.saveAll()
+  assert.deepEqual(app.navigation.at(-1),['back','creator'])
+  const creator=app.page('creator')
+  app.hooks.onShow.at(-1)(); await settle()
+  assert.equal(creator.library.restaurants.value[0].id,id)
+  creator.editRestaurant(id);await settle()
+  assert.deepEqual(app.navigation.at(-1),['toCustomMenu',id])
+  const mine=app.page('my-restaurants')
+  app.hooks.onShow.at(-1)(); await settle()
+  assert.equal(mine.library.restaurants.value[0].name,'我的私厨')
+  mine.dine(id);await settle()
+  assert.deepEqual(app.navigation.at(-1),['toCustomDining',id])
+  const setup=app.page('setup')
+  app.hooks.onLoad.at(-1)({restaurantId:id});await settle()
+  assert.equal(setup.typeId.value,'my-restaurants')
+  setup.start('单人');await settle()
+  assert.equal(app.store.view.session.restaurantId,id)
+  assert.equal(app.store.view.session.catalog.typeId,'custom')
+})
+
+test('我的餐厅作为种类直接设置门票并开始，用餐包含所有已完成餐厅菜单', async () => {
+  const app=harness()
+  const menu=id=>({id,name:id,categories:[{id:'cat',name:'肉类'}],products:[{id:'p',name:'牛肉',category:'cat',unit:'份',price:8}],valuationNote:'个人估值',sources:['个人经验']})
+  app.input('EditCatalog').execute({catalog:{typeId:'custom',typeName:'自定义',restaurants:[menu('a'),menu('b'),{...menu('empty'),products:[]}]}})
+  const setup=app.page('setup')
+  setup.openMyRestaurants()
+  setup.ticketInput.value='168'
+  setup.start('单人');await settle()
+  assert.equal(app.store.view.session.ticketPrice,168)
+  assert.equal(app.store.view.session.catalog.restaurants.length,2)
+  assert.equal(app.store.view.session.restaurantId,'a')
+  app.input('SelectRestaurant').execute({restaurantId:'b'})
+  assert.equal(app.store.view.session.restaurantId,'b')
+})
+
+test('menu 预览展示未保存菜品，可浏览分类，但不加菜、改票价、下单或修改当前单人与多人状态', async () => {
+  const app=harness(),requests=[]
+  app.stubRoom(async request=>{requests.push(request)})
+  app.input('BeginSession').execute({ticketPrice:100,diningMode:'单人'})
+  app.presentRoom(roomSnapshot())
+  const beforeSingle=JSON.stringify(app.store.view),beforeRoom=JSON.stringify(app.room.view)
+  const editor=app.page('custom-menu')
+  editor.restaurant.value.name='未保存菜单'
+  editor.editProduct(); editor.form.value.name='虾滑';editor.form.value.price='6'
+  await editor.applyForm()
+  await editor.previewRestaurant(editor.restaurant.value)
+  const previewId=app.navigation.at(-1)[1]
+  const menu=app.page('menu')
+  app.hooks.onLoad.at(-1)({previewId})
+  app.hooks.onShow.at(-1)();await settle()
+  assert.equal(menu.isPreview.value,true)
+  assert.equal(menu.filteredProducts.value[0].name,'虾滑')
+  assert.equal(menu.canCommitRound.value,false)
+  assert.equal(menu.canChangePrice.value,false)
+  await menu.addItem(menu.filteredProducts.value[0].id)
+  await menu.removeItem(menu.filteredProducts.value[0].id)
+  menu.editPrice();menu.openOrderSlip();menu.finish()
+  app.hooks.onUnload.at(-1)();await settle()
+  assert.equal(requests.length,0)
+  assert.equal(JSON.stringify(app.store.view),beforeSingle)
+  assert.equal(JSON.stringify(app.room.view),beforeRoom)
+  assert.equal(app.input('GetCatalog').execute({typeId:'custom'}).catalog.restaurants.length,0)
+  assert.equal(app.history.view.records.length,0)
+  const refreshed=app.page('menu')
+  app.hooks.onLoad.at(-1)({previewId});await settle()
+  assert.equal(refreshed.filteredProducts.value[0].name,'虾滑')
+})
+
+test('预览凭证失效返回创造者页面，不清除进行中的空单人会话', async () => {
+  const app=harness()
+  app.input('BeginSession').execute({ticketPrice:100,diningMode:'单人'})
+  const id=app.store.view.session.id
+  app.page('menu')
+  app.hooks.onLoad.at(-1)({previewId:'missing'});await settle()
+  app.hooks.onUnload.at(-1)();await settle()
+  assert.deepEqual(app.navigation.at(-1),['back','creator'])
+  assert.equal(app.store.view.session.id,id)
+  assert.equal(app.store.view.session.active,true)
+})
+
+test('编辑只更新当前餐厅；旧自定义数据保留，删除配置不改变活动菜单快照', async () => {
+  const app=harness()
+  const menu=id=>({id,name:id,categories:[{id:'cat',name:'肉类'}],products:[{id:'p',name:'牛肉',category:'cat',unit:'80克',price:8}],valuationNote:'个人估值',sources:['个人经验']})
+  app.input('EditCatalog').execute({catalog:{typeId:'custom',typeName:'自定义',restaurants:[menu('old-a'),menu('old-b')]}})
+  const editor=app.page('custom-menu')
+  app.hooks.onLoad.at(-1)({restaurantId:'old-a'});await settle()
+  editor.restaurant.value.name='改名后的餐厅'
+  await editor.saveAll()
+  const catalog=app.input('GetCatalog').execute({typeId:'custom'}).catalog
+  assert.equal(catalog.restaurants.length,2)
+  assert.equal(catalog.restaurants[1].name,'old-b')
+  app.input('BeginSession').execute({ticketPrice:100,diningMode:'单人',typeId:'custom',restaurantId:'old-b'})
+  const creator=app.page('creator')
+  creator.remove('old-b');await settle()
+  assert.equal(app.input('GetCatalog').execute({typeId:'custom'}).catalog.restaurants.length,1)
+  assert.equal(app.store.view.session.catalog.restaurants.length,2)
+  assert.equal(app.store.view.session.restaurantId,'old-b')
+})
+
+test('创建自定义多人房间上传已保存目录，并在创建后选中所选餐厅', async () => {
+  const app=harness(),requests=[]
+  app.stubRoom(async r=>{requests.push(r)})
+  const menu=id=>({id,name:id,categories:[{id:'cat',name:'肉类'}],products:[{id:'p',name:'牛肉',category:'cat',unit:'80克',price:8}],valuationNote:'个人估值',sources:['个人经验']})
+  app.input('EditCatalog').execute({catalog:{typeId:'custom',typeName:'自定义',restaurants:[menu('first'),menu('second')]}})
+  const setup=app.page('setup')
+  app.hooks.onLoad.at(-1)({restaurantId:'second'});await settle()
+  setup.enterRoom('create');await settle()
+  const created=requests.find(r=>r.command==='create')
+  assert.equal(created.params.typeId,'custom')
+  assert.equal(created.params.catalog.restaurants.length,2)
+  assert.equal(requests.find(r=>r.command==='selectRestaurant').params.restaurantId,'second')
+})
+
+test('退出空单人菜单后关闭会话且不记账，再次开始不提示已有用餐', async () => {
+  const app = harness()
+  app.input('BeginSession').execute({ticketPrice: 100, diningMode: '单人'})
+  app.page('menu')
+  await app.hooks.onUnload.at(-1)()
+  await settle()
+  assert.equal(app.store.view.session.active, false)
+  assert.equal(app.history.view.records.length, 0)
+  assert.equal(app.collection.view.receipts.length, 0)
+  const setup = app.page('setup')
+  setup.start('单人')
+  await settle()
+  assert.equal(app.modals.length, 0)
+  assert.equal(app.store.view.session.active, true)
+  assert.deepEqual(app.navigation.at(-1), ['open', 'menu'])
+})
+
+test('旧的空单人会话即使未触发卸载，也可以直接开始且不显示确认框', async () => {
+  const app = harness()
+  app.input('BeginSession').execute({ticketPrice: 100, diningMode: '单人'})
+  const oldId = app.store.view.session.id
+  const setup = app.page('setup')
+  setup.start('单人')
+  await settle()
+  assert.equal(app.modals.length, 0)
+  assert.notEqual(app.store.view.session.id, oldId)
+  assert.equal(app.history.view.records.length, 0)
+})
+
+test('退出有待选或有轮次的单人用餐保留会话，重新开始仍需确认', async () => {
+  for (const committed of [false, true]) {
+    const app = harness()
+    app.input('BeginSession').execute({ticketPrice: 100, diningMode: '单人'})
+    app.input('ChangeSelection').execute({productId: 'apple', change: 1})
+    if (committed) app.input('CommitRound').execute({})
+    app.page('menu')
+    await app.hooks.onUnload.at(-1)()
+    await settle()
+    assert.equal(app.store.view.session.active, true)
+    app.page('setup').start('单人')
+    await settle()
+    assert.ok(app.modals.includes('已有进行中的用餐'))
+  }
+})
+
+test('旧菜单卸载不会清除新建的空单人会话', async () => {
+  const app = harness()
+  app.input('BeginSession').execute({ticketPrice: 100, diningMode: '单人'})
+  app.page('menu')
+  app.input('BeginSession').execute({ticketPrice: 200, diningMode: '单人', replaceActive: true})
+  const newId = app.store.view.session.id
+  await app.hooks.onUnload.at(-1)()
+  await settle()
+  assert.equal(app.store.view.session.id, newId)
+  assert.equal(app.store.view.session.active, true)
+})
+
+test('单人空用餐退出后创建多人房间不会被确认框阻塞，也不产生历史记录', async () => {
+  const app = harness(), requests = []
+  app.stubRoom(async request => {requests.push(request)})
+  const first = app.page('setup')
+  first.start('单人')
+  await settle()
+  assert.equal(first.starting.value, false)
+  const returned = app.page('setup')
+  returned.openRoom()
+  await settle()
+  returned.enterRoom('create')
+  await settle()
+  assert.ok(requests.some(request => request.command === 'check'))
+  assert.ok(requests.some(request => request.command === 'create'))
+  assert.equal(returned.starting.value, false)
+  assert.equal(returned.showRoomModal.value, false)
+  assert.equal(app.modals.length, 0)
+  assert.deepEqual(app.navigation.at(-1), ['open', 'menu'])
+  assert.equal(app.history.view.records.length, 0)
+  assert.equal(app.store.view.session.active, false)
+})
+
+test('有单人点餐时在同一个弹窗内确认切换，不调用被遮挡的系统确认框', async () => {
+  const app = harness(), requests = []
+  app.stubRoom(async request => {requests.push(request)})
+  app.input('BeginSession').execute({ticketPrice: 100, diningMode: '单人'})
+  app.input('ChangeSelection').execute({productId: 'apple', change: 1})
+  const setup = app.page('setup')
+  setup.openRoom(); await settle()
+  setup.enterRoom('create'); await settle()
+  assert.equal(setup.pendingEntry.value, 'create')
+  assert.equal(setup.starting.value, false)
+  assert.equal(requests.some(request => request.command === 'create'), false)
+  setup.enterRoom('create', true); await settle()
+  assert.ok(requests.some(request => request.command === 'create'))
+  assert.equal(app.modals.length, 0)
+  assert.equal(setup.starting.value, false)
+})
+
+test('菜单点击门票可修改单人票价，多人成员不能修改票价或打开本轮点单', async () => {
+  const app = harness(), requests = []
+  app.stubRoom(async request => {requests.push(request)})
+  app.input('BeginSession').execute({ticketPrice: 100, diningMode: '单人'})
+  const menu = app.page('menu')
+  menu.editPrice()
+  assert.equal(menu.editingPrice.value, true)
+  menu.priceInput.value = '188.88'
+  await menu.savePrice()
+  assert.equal(app.store.view.session.ticketPrice, 188.88)
+  app.presentRoom(roomSnapshot(), 'member-2')
+  assert.equal(menu.canChangePrice.value, false)
+  assert.equal(menu.canCommitRound.value, false)
+  menu.openOrderSlip(); await settle()
+  assert.equal(app.navigation.some(([method]) => method === 'toOrderSlip'), false)
+  const order = app.page('order-slip')
+  order.completeRound(); await settle()
+  assert.equal(requests.some(request => request.command === 'commitRound'), false)
+})
+
+test('多人入口先弹窗，创建沿用首页门票和个人昵称，并进入相同菜单页', async () => {
+  const app = harness(), requests = []
+  app.stubRoom(async request => {requests.push(request)})
+  app.storage.set('buffet-profile-nickname-v1', '小羊')
+  const setup = app.page('setup')
+  setup.ticketInput.value = '328.5'
+  setup.openRoom()
+  await settle()
+  assert.equal(setup.showRoomModal.value, true)
+  assert.deepEqual(app.navigation, [])
+  setup.enterRoom('create')
+  await settle()
+  const request = requests.find(request => request.command === 'create')
+  assert.equal(request.params.ticketPrice, 328.5)
+  assert.equal(request.params.nickname, '小羊')
+  assert.equal(setup.showRoomModal.value, false)
+  assert.deepEqual(app.navigation.at(-1), ['open', 'menu'])
+})
+
+test('加入弹窗校验六位房间号，使用个人昵称，成功进入菜单', async () => {
+  const app = harness(), requests = []
+  app.stubRoom(async request => {requests.push(request)})
+  const setup = app.page('setup')
+  setup.showRoomModal.value = true; setup.joining.value = true; setup.roomCode.value = '12'
+  setup.enterRoom('join')
+  await settle()
+  assert.equal(requests.length, 0)
+  assert.match(app.toasts.at(-1), /六位房间号/)
+  setup.roomCode.value = '123456'
+  setup.enterRoom('join')
+  await settle()
+  const request = requests.find(request => request.command === 'join')
+  assert.equal(request.params.code, '123456')
+  assert.equal(request.params.nickname, '新手食客')
+  assert.deepEqual(app.navigation.at(-1), ['open', 'menu'])
+})
+
+test('共享房间复用菜单、购物车与轮次页面，不修改单人状态', async () => {
+  const app = harness(), requests = []
+  app.stubRoom(async request => {requests.push(request)})
+  app.presentRoom(roomSnapshot())
+  const menu = app.page('menu')
+  assert.equal(menu.diningStore.view.displayValue, 20)
+  assert.equal(menu.diningStore.view.session.ticketPrice, 288)
+  assert.equal(menu.diningStore.view.selectedLines[0].count, 2)
+  await menu.addItem('apple')
+  assert.equal(requests.at(-1).command, 'changeSelection')
+  assert.equal(requests.at(-1).params.change, 1)
+  assert.equal(app.store.view.totalSelectedCount, 0)
+  menu.openOrderSlip()
+  await settle()
+  assert.deepEqual(app.navigation.at(-1), ['toOrderSlip'])
+  const order = app.page('order-slip')
+  order.completeRound()
+  await settle()
+  assert.equal(requests.at(-1).command, 'commitRound')
+  assert.equal(requests.at(-1).params.expectedRevision, 7)
+  assert.deepEqual(app.navigation.at(-1), ['back', 'menu'])
+})
+
+test('我的昵称可保存且同步到当前队伍，空昵称不覆盖已有设置', async () => {
+  const app = harness(), requests = []
+  app.stubRoom(async request => {requests.push(request)})
+  app.presentRoom(roomSnapshot())
+  const mine = app.page('mine')
+  mine.editNickname(); mine.nicknameInput.value = '  快乐食客  '
+  await mine.saveNickname()
+  assert.equal(app.profile.nickname, '快乐食客')
+  assert.equal(app.storage.get('buffet-profile-nickname-v1'), '快乐食客')
+  assert.equal(requests.at(-1).command, 'rename')
+  assert.equal(requests.at(-1).params.nickname, '快乐食客')
+  mine.editNickname(); mine.nicknameInput.value = '   '
+  await mine.saveNickname()
+  assert.equal(app.profile.nickname, '快乐食客')
+  assert.match(app.toasts.at(-1), /昵称需/)
+})
+
+test('多人复用结果页，房主结束后再由个人选择收藏', async () => {
+  const app = harness(), requests = []
+  const receipt = {id: 'shared-room-1', restaurant: '牛牛 · 多人共享', date: '2026-10-23', price: 288, value: 20,
+    lines: [{name: '唯可鲜富士苹果汁', count: 2, price: 10}], rounds: [{time: '12:00:00', value: 20, lines: [{name: '唯可鲜富士苹果汁', count: 2, price: 10}]}]}
+  app.stubRoom(async request => {
+    requests.push(request)
+    if (request.command === 'end') app.presentRoom(roomSnapshot({status: 'ended', selected: {}, rounds: receipt.rounds, receipt}))
+    if (request.command === 'leave') app.presentRoom(null)
+  })
+  app.presentRoom(roomSnapshot())
+  const result = app.page('result')
+  assert.equal(result.isRoomView.value, true)
+  assert.equal(result.displayReceipt.value.value, 20)
+  result.endRoom()
+  await settle()
+  assert.equal(requests.at(-1).command, 'end')
+  assert.equal(result.roomEnded.value, true)
+  assert.equal(app.collection.view.receipts.length, 0)
+  result.finishShared(true)
+  await settle()
+  assert.equal(app.collection.view.receipts[0].id, receipt.id)
+  assert.equal(app.history.view.records[0].price, 288)
+  assert.deepEqual(app.navigation.at(-1), ['open', 'mine', 'reset'])
+})
 
 test('初始化失败时直接进入菜单不误跳转，重试成功后才执行会话检查', async () => {
   let fail = true
@@ -113,14 +488,14 @@ test('真实页面事件从开始、菜单加减、提交到结果收藏，展�
   assert.equal(app.store.view.session.ticketPrice, 20)
   assert.deepEqual(app.navigation[0], ['open', 'menu'])
   const menu = app.page('menu')
-  await menu.addItem('beef')
+  await menu.addItem('niuniu-p1-1')
   assert.equal(menu.diningStore.view.totalSelectedCount, 1)
-  assert.equal(menu.diningStore.view.displayValue, 8)
-  await menu.removeItem('beef')
+  assert.equal(menu.diningStore.view.displayValue, 10)
+  await menu.removeItem('niuniu-p1-1')
   assert.equal(menu.diningStore.view.totalSelectedCount, 0)
-  await menu.addItem('juice')
-  menu.selectCategory('我的最爱')
-  assert.equal(menu.filteredProducts.value.some(product => product.id === 'beef'), true)
+  await menu.addItem('niuniu-p1-2')
+  menu.selectCategory('肉类海鲜')
+  assert.equal(menu.filteredProducts.value.some(product => product.id === 'niuniu-p1-1'), true)
   menu.openOrderSlip()
   await flush()
   assert.deepEqual(app.navigation.at(-1), ['toOrderSlip'])
@@ -129,14 +504,14 @@ test('真实页面事件从开始、菜单加减、提交到结果收藏，展�
   await flush()
   assert.equal(app.store.view.session.rounds.length, 1)
   assert.equal(menu.diningStore.view.totalSelectedCount, 0)
-  await menu.addItem('beef')
+  await menu.addItem('niuniu-p1-1')
   const result = app.page('result')
-  assert.equal(result.displayReceipt.value.value, 15.5)
+  assert.equal(result.displayReceipt.value.value, 21)
   assert.equal(app.store.view.session.rounds.length, 1)
   result.save()
   await flush()
   assert.equal(app.history.view.records[0].rounds.length, 2)
-  assert.equal(app.collection.view.receipts[0].value, 15.5)
+  assert.equal(app.collection.view.receipts[0].value, 21)
   assert.deepEqual(app.navigation.at(-1), ['open', 'mine', 'reset'])
 })
 

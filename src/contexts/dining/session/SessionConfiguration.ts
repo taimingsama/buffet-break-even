@@ -1,3 +1,4 @@
+import {SelectRestaurantInteractor} from './application/interactor/SelectRestaurantInteractor'
 import type {LocalDiningDatabase} from '@/infrastructure/persistence/LocalDiningDatabase'
 import type {AfterCommit} from '@/infrastructure/transaction/AfterCommit'
 import type {DiningView} from '@/presentation/dining/DiningView'
@@ -13,6 +14,7 @@ import {ChangeSelectionInteractor} from './application/interactor/ChangeSelectio
 import {CommitRoundInteractor} from './application/interactor/CommitRoundInteractor'
 import {PrepareDiningCompletionInteractor} from './application/interactor/PrepareDiningCompletionInteractor'
 import {CloseDiningInteractor} from './application/interactor/CloseDiningInteractor'
+import {ChangeTicketPriceInteractor} from './application/interactor/ChangeTicketPriceInteractor'
 
 export function createSession(database: LocalDiningDatabase, view: DiningView,
                               catalog: CatalogGateway, afterCommit: AfterCommit,
@@ -21,8 +23,10 @@ export function createSession(database: LocalDiningDatabase, view: DiningView,
     const clock = new SystemDiningClock()
     const presenter = new DiningPresenter(view, appearance, catalog, clock, afterCommit)
     return {
+        selectRestaurant: new SelectRestaurantInteractor(repository, repository, presenter),
+        changeTicketPrice: new ChangeTicketPriceInteractor(repository, repository, presenter),
         loadDining: new LoadDiningInteractor(repository, presenter),
-        beginSession: new BeginSessionInteractor(repository, repository, presenter, new DiningIdGeneratorAdapter()),
+        beginSession: new BeginSessionInteractor(repository, repository, presenter, new DiningIdGeneratorAdapter(), catalog),
         changeSelection: new ChangeSelectionInteractor(repository, repository, presenter, catalog),
         commitRound: new CommitRoundInteractor(repository, repository, presenter, catalog, clock),
         prepareDiningCompletion: new PrepareDiningCompletionInteractor(repository, catalog, clock, clock),

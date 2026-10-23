@@ -10,7 +10,7 @@ export namespace PrepareDiningCompletionInput {
 
     export class Response {
         constructor(public result: {
-            id: string; restaurant: string; date: string; price: number; value: number;
+            restaurantId?: string; typeId?: string; typeName?: string; id: string; restaurant: string; date: string; price: number; value: number;
             lines: { name: string; count: number; price: number }[];
             rounds: { time: string; value: number; lines: { name: string; count: number; price: number }[] }[]
         } | null) {

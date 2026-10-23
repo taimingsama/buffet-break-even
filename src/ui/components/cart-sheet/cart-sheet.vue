@@ -23,7 +23,8 @@
           <text>本轮合计</text>
           <text>¥{{ formatPrice(total) }}</text>
         </view>
-        <view class="waiter-button flex-center" @tap="$emit('confirm')">给 Waiter 看菜单</view>
+        <view v-if="canConfirm && lines.length" class="waiter-button flex-center" @tap="$emit('confirm')">给 Waiter 看菜单</view>
+        <text v-else class="cart-hint">{{ !lines.length ? '本轮还没有选择菜品' : '等待房主给 Waiter 看菜单并提交本轮' }}</text>
       </view>
     </view>
   </view>
@@ -33,7 +34,7 @@
 import type {ProductLineView} from '@/presentation/dining/ProductLineView'
 import {formatPrice} from '@/utils/format'
 
-defineProps<{ lines: ProductLineView[]; total: number }>()
+withDefaults(defineProps<{ lines: ProductLineView[]; total: number; canConfirm?: boolean }>(), {canConfirm: true})
 defineEmits<{
   (event: 'close'): void
   (event: 'add', id: string): void
@@ -43,6 +44,7 @@ defineEmits<{
 </script>
 
 <style scoped>
+.cart-hint {color:#9a7d65;font-size:25rpx;text-align:center;padding:24rpx 0}
 .modal-mask {
   position: fixed;
   inset: 0;

@@ -3,6 +3,8 @@ import type {ReceiptRoundView} from './ReceiptRoundView'
 import type {BreakEvenView} from '../shared/BreakEvenView'
 
 export interface ReceiptViewModel {
+    participants?: string[];
+    restaurantId?: string; typeId?: string; typeName?: string;
     id: string;
     restaurant: string;
     date: string;

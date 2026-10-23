@@ -11,7 +11,7 @@
               <text class="label-chip inline-flex-center">第 {{ historyStore.view.records.length - index }} 餐</text>
               <text class="restaurant">{{ item.restaurant }}</text>
             </view>
-            <text class="record-date">{{ item.date }}</text>
+            <text class="record-date">{{ formatDateTime(item.date) }}</text>
           </view>
           <view class="round-count">
             <text>{{ item.rounds.length }} 轮</text>
@@ -26,10 +26,13 @@
             <text>就餐价格 ¥{{ item.price }}</text>
             <text>已吃价值 ¥{{ item.value }}</text>
           </view>
+          <view v-if="item.participants?.length" class="record-total record-participants">
+            <text>用餐人：{{ item.participants.join('、') }}</text>
+          </view>
           <view v-for="(round, roundIndex) in item.rounds" :key="roundIndex" class="round-box">
             <view class="round-head">
               <text>第 {{ roundIndex + 1 }} 轮</text>
-              <text>{{ round.time }}</text>
+              <text>{{ formatRoundTime(round.time) }}</text>
               <text>¥{{ round.value.toFixed(2) }}</text>
             </view>
             <view v-for="line in round.lines" :key="line.name" class="detail-line">
@@ -56,6 +59,7 @@ import {ref} from 'vue'
 import {useRequired} from '@/ui/composables/useRequired'
 import {runAction} from '@/ui/composables/runAction'
 import {BuffetNavigation} from '@/ui/navigation/BuffetNavigation'
+import {formatDateTime, formatRoundTime} from '@/ui/format/time'
 
 const navigation = useRequired<BuffetNavigation>(BuffetNavigation)
 import {useHistoryStore} from '@/ui/stores/useHistoryStore'
@@ -167,6 +171,13 @@ const openDetail = (id: string) => runAction(() => navigation.toRecord(id))
   padding: 20rpx;
   border: 2rpx solid #ffe1cd;
   border-radius: 18rpx;
+}
+
+.record-participants {
+  color: #9c8d80;
+  font-weight: 400;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .round-head {

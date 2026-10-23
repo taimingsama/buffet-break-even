@@ -26,6 +26,7 @@ export class CompleteDiningInteractor implements CompleteDiningInput {
 
     private mapResult(result: NonNullable<PrepareDiningCompletionInput.Response['result']>) {
         return {
+            restaurantId: result.restaurantId, typeId: result.typeId, typeName: result.typeName,
             id: result.id, restaurant: result.restaurant, date: result.date, price: result.price, value: result.value,
             lines: result.lines.map(line => ({name: line.name, count: line.count, price: line.price})),
             rounds: result.rounds.map(round => ({

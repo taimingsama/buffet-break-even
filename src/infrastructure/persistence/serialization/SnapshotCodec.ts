@@ -1,3 +1,5 @@
+import {validateCatalog} from '@/utils/restaurant-catalog'
+import {products as legacyProducts} from '@/data/catalog'
 import type {SnapshotDocument} from '../schema/SnapshotDocument'
 import type {StoredSession} from '../schema/StoredSession'
 import type {StoredReceipt} from '../schema/StoredReceipt'
@@ -39,7 +41,11 @@ function round(value: unknown): StoredRound {
 export function decodeReceipt(value: unknown): StoredReceipt {
     const data = object(value)
     return {
+        ...(data.restaurantId === undefined ? {} : {restaurantId: string(data.restaurantId)}),
+        ...(data.typeId === undefined ? {} : {typeId: string(data.typeId)}),
+        ...(data.typeName === undefined ? {} : {typeName: string(data.typeName)}),
         id: string(data.id), restaurant: string(data.restaurant), date: string(data.date), price: amount(data.price),
+        ...(data.participants === undefined ? {} : {participants: list(data.participants, string)}),
         value: amount(data.value), lines: list(data.lines, line), rounds: list(data.rounds, round)
     }
 }
@@ -48,7 +54,25 @@ export function decodeSession(value: unknown): StoredSession {
     const data = object(value)
     if (typeof data.active !== 'boolean') throw new Error('存储会话无效')
     const selected = Object.fromEntries(Object.entries(object(data.selected)).map(([id, value]) => [id, count(value)]))
+    const rounds = list(data.rounds, round)
+    if (!data.catalog && data.active && data.diningMode === '单人' && !Object.keys(selected).length && !rounds.length) {
+        return {active: false, id: '', ticketPrice: 200, diningMode: '单人', restaurant: '牛牛', selected: {}, rounds: []}
+    }
+    const catalog = data.catalog ? validateCatalog(data.catalog) : data.active ? {
+        typeId: 'legacy', typeName: '旧版菜单', restaurants: [{id: 'legacy', name: string(data.restaurant),
+            categories: [...new Set(legacyProducts.map(p => p.category))].map((name, i) => ({id: 'legacy-c'+i, name})),
+            products: legacyProducts.map(p => ({id:p.id, name:p.name, category:'legacy-c'+[...new Set(legacyProducts.map(p=>p.category))].indexOf(p.category), price:p.price, unit:'份', emoji:p.emoji})),
+            valuationNote:'旧版菜单参考估值，仅用于继续旧会话', sources:['迁移自本地版本3菜单']}]
+    } : undefined
+    const restaurantId = data.catalog ? string(data.restaurantId) : catalog ? 'legacy' : undefined
+    if (catalog && !catalog.restaurants.some(r => r.id === restaurantId)) throw new Error('存储餐厅无效')
+    const drafts = data.drafts ? Object.fromEntries(Object.entries(object(data.drafts)).map(([id, value]) => {
+        if (!catalog?.restaurants.some(r => r.id === id)) throw new Error('存储餐厅无效')
+        const d = object(value)
+        return [id, {selected: Object.fromEntries(Object.entries(object(d.selected)).map(([pid, qty]) => [pid, count(qty)])), rounds:list(d.rounds, round)}]
+    })) : {}
     return {
+        ...(catalog ? {catalog, restaurantId, drafts} : {}),
         active: data.active,
         id: string(data.id),
         ticketPrice: amount(data.ticketPrice),
@@ -64,12 +88,12 @@ export const isMissing = (value: unknown) => value === undefined || value === nu
 
 export function decodeSnapshot(value: unknown): SnapshotDocument {
     const data = object(value)
-    if (data.version !== 3) throw new Error('未知存储版本')
+    if (data.version !== 3 && data.version !== 4) throw new Error('未知存储版本')
     return {session: decodeSession(data.session), records: list(data.records, decodeReceipt), receipts: list(data.receipts, decodeReceipt)}
 }
 
 export function encodeSnapshot(snapshot: SnapshotDocument) {
-    return {version: 3, session: decodeSession(snapshot.session), records: snapshot.records.map(decodeReceipt), receipts: snapshot.receipts.map(decodeReceipt)}
+    return {version: 4, session: decodeSession(snapshot.session), records: snapshot.records.map(decodeReceipt), receipts: snapshot.receipts.map(decodeReceipt)}
 }
 
 export function decodeReceipts(value: unknown): StoredReceipt[] {

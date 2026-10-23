@@ -4,7 +4,8 @@ import type {NavigationPlatform} from './NavigationPlatform'
 
 const routes: Record<Destination, string> = {
     setup: '/pages/setup/index', menu: '/pages/menu/index', mine: '/pages/mine/index',
-    receipts: '/pages/receipts/index', records: '/pages/records/index'
+    receipts: '/pages/receipts/index', records: '/pages/records/index', room: '/pages/room/index', 'custom-menu': '/pages/custom-menu/index',
+    creator: '/pages/creator/index', 'my-restaurants': '/pages/my-restaurants/index'
 }
 
 export class UniBuffetNavigation implements BuffetNavigation {
@@ -34,6 +35,18 @@ export class UniBuffetNavigation implements BuffetNavigation {
 
     toRecord(recordId: string) {
         return this.go(`/pages/record-detail/index?recordId=${encodeURIComponent(recordId)}`)
+    }
+
+    toCustomMenu(restaurantId?: string) {
+        return this.go(`/pages/custom-menu/index${restaurantId ? '?restaurantId=' + encodeURIComponent(restaurantId) : ''}`)
+    }
+
+    toCustomDining(restaurantId?: string) {
+        return this.go(`/pages/setup/index?typeId=custom${restaurantId ? '&restaurantId=' + encodeURIComponent(restaurantId) : ''}`)
+    }
+
+    toMenuPreview(previewId: string) {
+        return this.go(`/pages/menu/index?previewId=${encodeURIComponent(previewId)}`)
     }
 
     async back(fallback: Destination): Promise<void> {

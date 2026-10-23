@@ -3,9 +3,9 @@ const path = require('node:path')
 const ts = require('typescript')
 
 const contextEntry = /^contexts\/(catalog|dining)\/public$/
-const moduleEntry = /^contexts\/dining\/(session|history|collection|completion)\/public$/
+const moduleEntry = /^contexts\/dining\/(session|history|collection|completion|room)\/public$/
 const contextOf = file => file.match(/^contexts\/(catalog|dining)\//)?.[1]
-const moduleOf = file => file.match(/^(contexts\/dining\/(session|history|collection|completion))\//)?.[1]
+const moduleOf = file => file.match(/^(contexts\/dining\/(session|history|collection|completion|room))\//)?.[1]
 
 function inspectSource(file, source) {
   file = file.replaceAll('\\', '/')

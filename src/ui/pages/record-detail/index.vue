@@ -9,12 +9,13 @@
             <text class="label-chip inline-flex-center">本餐</text>
             <text class="restaurant">{{ receipt.restaurant }}</text>
           </view>
-          <text class="record-date">{{ receipt.date }}</text>
+          <text class="record-date">{{ formatDateTime(receipt.date) }}</text>
+          <text v-if="receipt.participants?.length" class="record-date">用餐人：{{ receipt.participants.join('、') }}</text>
         </view>
         <view v-for="(round, roundIndex) in receipt.rounds" :key="roundIndex" class="round-box">
           <view class="round-head">
             <text class="round-chip inline-flex-center">第 {{ roundIndex + 1 }} 轮</text>
-            <text class="round-time">{{ round.time }}</text>
+            <text class="round-time">{{ formatRoundTime(round.time) }}</text>
             <text class="round-value">¥{{ round.value.toFixed(2) }}</text>
           </view>
           <view v-for="line in round.lines" :key="line.name" class="detail-line">
@@ -42,6 +43,7 @@ import {DeleteRecordInput} from '@/contexts/dining/public'
 import {useRequired} from '@/ui/composables/useRequired'
 import {runAction} from '@/ui/composables/runAction'
 import {BuffetNavigation} from '@/ui/navigation/BuffetNavigation'
+import {formatDateTime, formatRoundTime} from '@/ui/format/time'
 
 const navigation = useRequired<BuffetNavigation>(BuffetNavigation)
 import {useHistoryStore} from '@/ui/stores/useHistoryStore'

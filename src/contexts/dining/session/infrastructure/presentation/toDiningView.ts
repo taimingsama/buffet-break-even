@@ -13,6 +13,7 @@ export function toDiningView(session: DiningSession, catalog: readonly Product[]
     const preview = session.preview(catalog, date)
     return {
         session: {
+            catalog: session.catalog, restaurantId: session.restaurantId, hasAnyDraft: session.hasAnyDraft,
             active: session.active,
             id: session.id,
             ticketPrice: session.ticketPrice,

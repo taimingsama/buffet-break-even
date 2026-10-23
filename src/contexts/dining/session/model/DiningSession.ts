@@ -1,3 +1,4 @@
+import {cloneCatalog, restaurantProducts, validateCatalog, type DiningCatalog} from '@/utils/restaurant-catalog'
 import type {DiningSessionSnapshot} from './snapshot/DiningSessionSnapshot'
 import type {Product} from './snapshot/Product'
 import type {SavedRound} from './snapshot/SavedRound'
@@ -15,7 +16,7 @@ export class DiningSession {
     private constructor(snapshot: DiningSessionSnapshot) {
         this.state = {
             active: snapshot.active, id: snapshot.id, ticketPrice: snapshot.ticketPrice,
-            diningMode: snapshot.diningMode, restaurant: snapshot.restaurant
+            diningMode: snapshot.diningMode, restaurant: snapshot.restaurant, catalog: snapshot.catalog && cloneCatalog(snapshot.catalog), restaurantId: snapshot.restaurantId, drafts: snapshot.drafts && cloneCatalog(snapshot.drafts)
         }
         this.selection = new DiningSelection(snapshot.selected)
         this.history = snapshot.rounds.map(DiningRound.restore)
@@ -37,19 +38,38 @@ export class DiningSession {
         return new DiningSession(snapshot)
     }
 
-    begin(price: number, mode: string, id: string, replaceActive = false): DiningSession {
+    begin(price: number, mode: string, id: string, replaceActive = false, catalog?: DiningCatalog): DiningSession {
         if (this.active && !replaceActive) throw new Error('当前用餐尚未结束，请继续用餐或确认重新开始')
         if (cents(price) <= 0) throw new Error('请输入大于零的门票价格')
         if (mode !== '单人' && mode !== '多人') throw new Error('用餐模式无效')
         if (!id) throw new Error('用餐编号不能为空')
+        if (catalog) catalog = validateCatalog(catalog)
         return DiningSession.restore({
             ...DiningSession.empty().toSnapshot(), active: true, id,
-            ticketPrice: cents(price) / 100, diningMode: mode
+            ticketPrice: cents(price) / 100, diningMode: mode,
+            ...(catalog ? {catalog: cloneCatalog(catalog), restaurantId: catalog.restaurants[0].id, restaurant: catalog.restaurants[0].name, drafts: {}} : {})
         })
     }
 
+    products(fallback: readonly Product[]): readonly Product[] {
+        const menu = this.state.catalog?.restaurants.find(r => r.id === this.state.restaurantId)
+        return menu ? restaurantProducts(menu) : fallback
+    }
+    selectRestaurant(restaurantId: string): DiningSession {
+        const menu = this.state.catalog?.restaurants.find(r => r.id === restaurantId)
+        if (!this.active || !menu) throw new Error('餐厅不存在')
+        if (restaurantId === this.state.restaurantId) return this
+        const drafts = {...this.state.drafts, [this.state.restaurantId!]: {selected: this.selected, rounds: this.rounds}}
+        const draft = drafts[restaurantId] || {selected: {}, rounds: []}
+        return DiningSession.restore({...this.toSnapshot(), drafts, restaurantId, restaurant: menu.name, ...draft})
+    }
+    get catalog() {return this.state.catalog && cloneCatalog(this.state.catalog)}
+    get restaurantId() {return this.state.restaurantId}
+    get hasAnyDraft() {return Boolean(this.rounds.length || Object.keys(this.selected).length || Object.entries(this.state.drafts || {}).some(([id, d]) => id !== this.restaurantId && (d.rounds.length || Object.keys(d.selected).length)))}
+
     changeSelection(productId: string, change: 1 | -1, catalog: readonly Product[]): DiningSession {
         if (!this.active) throw new Error('请先开始用餐')
+        catalog = this.products(catalog)
         if (!catalog.some(product => product.id === productId)) throw new Error('菜品不存在')
         return DiningSession.restore({
             ...this.toSnapshot(),
@@ -58,7 +78,7 @@ export class DiningSession {
     }
 
     commitRound(catalog: readonly Product[], time: string): DiningSession {
-        const lines = this.selection.resolve(catalog)
+        const lines = this.selection.resolve(this.products(catalog))
         if (!this.active || !lines.length) return this
         return DiningSession.restore({
             ...this.toSnapshot(), selected: {},
@@ -67,12 +87,18 @@ export class DiningSession {
     }
 
     preview(catalog: readonly Product[], date: string): DiningResult {
-        return DiningResult.from(this, date, this.selection.resolve(catalog))
+        return DiningResult.from(this, date, this.selection.resolve(this.products(catalog)))
     }
 
     prepareCompletion(catalog: readonly Product[], time: string, date: string): DiningResult | null {
         const final = this.commitRound(catalog, time)
         return final.active && final.history.length ? DiningResult.from(final, date) : null
+    }
+
+    changeTicketPrice(price: number): DiningSession {
+        if (!this.active) throw new Error('请先开始用餐')
+        if (!Number.isFinite(price) || cents(price) <= 0) throw new Error('请输入大于零的门票价格')
+        return DiningSession.restore({...this.toSnapshot(), ticketPrice: cents(price) / 100})
     }
 
     close(expectedId: string): DiningSession {
@@ -81,15 +107,15 @@ export class DiningSession {
     }
 
     selectedLines(catalog: readonly Product[]) {
-        return this.selection.resolve(catalog)
+        return this.selection.resolve(this.products(catalog))
     }
 
     selectedCount(catalog: readonly Product[]): number {
-        return this.selection.count(catalog)
+        return this.selection.count(this.products(catalog))
     }
 
     canFinish(catalog: readonly Product[]): boolean {
-        return this.active && (this.history.length > 0 || this.selection.resolve(catalog).length > 0)
+        return this.active && (this.history.length > 0 || this.selection.resolve(this.products(catalog)).length > 0)
     }
 
     get active() {
@@ -127,6 +153,7 @@ export class DiningSession {
     toSnapshot(): DiningSessionSnapshot {
         return {
             active: this.active, id: this.id, ticketPrice: this.ticketPrice, diningMode: this.diningMode,
+            catalog: this.catalog, restaurantId: this.restaurantId, drafts: this.state.drafts && cloneCatalog(this.state.drafts),
             restaurant: this.restaurant, selected: this.selected, rounds: this.rounds
         }
     }

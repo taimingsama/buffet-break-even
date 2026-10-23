@@ -4,7 +4,7 @@
 
 CompleteDiningInteractor 在同一本地同步事务中依次：
 
-1. 准备最终结果，包含最后一轮待选；无有效用餐则返回未完成。
+1. 准备当前餐厅的最终结果，包含该店最后一轮待选；该店无有效用餐则返回未完成。其他餐厅不参与结算。
 2. 将独立 DTO 映射到 History 并暂存记录。
 3. 用户选择收藏时映射到 Collection 并暂存收藏。
 4. 校验会话 ID，暂存关闭后的空会话。
@@ -16,9 +16,9 @@ LocalDiningDatabase 只负责物理缓存、暂存、单次提交和提交后通
 
 ## 持久化兼容
 
-继续使用 `buffet-state-v3` 单键、version 3 和 session / records / receipts 字段，不迁移现有 v3 格式。
+使用 `buffet-state-v4` 单键、version 4 和 session / records / receipts 字段。session 新增完整固定菜单、当前餐厅ID和各店草稿。版本3读取时迁移，旧历史和收藏保持原数据，详见 [迁移说明](migration-v4.md)。
 
-- storage/UniSnapshotStorage：组织平台读写；存在 v3 文档时优先读取。
+- storage/UniSnapshotStorage：组织平台读写；优先读取 v4，缺失时读取 v3，下一次保存写入 v4，保留旧键。
 - serialization/SnapshotCodec：校验并转换当前格式，读写均生成独立数据。
 - migration/LegacySnapshotReader：读取 buffet-session-v2、buffet-records、buffet-receipts；缺失记录时由收藏初始化，不删除旧键。
 - schema：物理存储 DTO；不作为领域共享模型。

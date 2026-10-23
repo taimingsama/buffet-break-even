@@ -27,8 +27,11 @@
         <view class="printer-slot"/>
       </view>
       <receipt-paper
+          :restaurant="displayReceipt.restaurant"
+          :type-name="displayReceipt.typeName"
+          :participants="displayReceipt.participants"
           :receipt-id="shortId"
-          :date-time="displayReceipt.date"
+          :date-time="formatDateTime(displayReceipt.date)"
           :price="displayReceipt.price"
           :value="displayReceipt.value"
           :lines="displayReceipt.lines"
@@ -39,7 +42,19 @@
     <view v-if="isSavedView" class="result-actions">
       <view class="secondary-action flex-center" @tap="confirmDelete">删除收藏</view>
     </view>
-    <view v-if="!isSavedView" class="result-actions">
+    <text v-if="isRoomView && roomStore.view.message" class="room-result-note">{{ roomStore.view.message }}</text>
+    <view v-if="isRoomView" class="result-actions">
+      <template v-if="roomEnded">
+        <view class="secondary-action flex-center" @tap="finishShared(false)">不收藏，返回首页</view>
+        <view class="primary-action flex-center" @tap="finishShared(true)">存到小票夹</view>
+      </template>
+      <template v-else>
+        <view class="secondary-action flex-center" @tap="goBack">继续用餐</view>
+        <view v-if="isHost" class="primary-action flex-center" @tap="endRoom">结束整桌用餐</view>
+        <view v-else class="secondary-action flex-center">等待房主结束</view>
+      </template>
+    </view>
+    <view v-if="!isSavedView && !isRoomView" class="result-actions">
       <view class="secondary-action flex-center" @tap="endDining">结束用餐</view>
       <view class="primary-action flex-center" @tap="save">存到小票夹</view>
     </view>
@@ -58,19 +73,28 @@ import ResultNavbar from '@/ui/components/result-navbar/result-navbar.vue'
 import {useRequired} from '@/ui/composables/useRequired'
 import {runAction} from '@/ui/composables/runAction'
 import {BuffetNavigation} from '@/ui/navigation/BuffetNavigation'
+import {formatDateTime} from '@/ui/format/time'
+import {RoomInput, SaveRoomResultInput} from '@/contexts/dining/public'
+import {useRoomStore} from '@/ui/stores/useRoomStore'
+import {useActiveDining, useRoomConnection} from '@/ui/composables/useActiveDining'
 
 const applicationStore = useApplicationStore()
 const navigation = useRequired<BuffetNavigation>(BuffetNavigation)
-import {useDiningStore} from '@/ui/stores/useDiningStore'
 import {useCollectionStore} from '@/ui/stores/useCollectionStore'
 
-const diningStore = useDiningStore()
+const diningStore = useActiveDining()
+const roomStore = useRoomStore(), restoreRoom = useRoomConnection()
+const roomInput = useRequired<RoomInput>(RoomInput.Token)
+const saveRoom = useRequired<SaveRoomResultInput>(SaveRoomResultInput.Token)
 const collectionStore = useCollectionStore()
 const complete = useRequired<CompleteDiningInput>(CompleteDiningInput.Token)
 const removeReceipt = useRequired<DeleteReceiptInput>(DeleteReceiptInput.Token)
 const receiptId = ref('')
 const finishing = ref(false)
 const isSavedView = computed(() => Boolean(receiptId.value))
+const isRoomView = computed(() => !isSavedView.value && Boolean(roomStore.view.snapshot))
+const roomEnded = computed(() => roomStore.view.snapshot?.status === 'ended')
+const isHost = computed(() => roomStore.view.snapshot?.hostId === roomStore.view.memberId)
 const savedReceipt = computed(() => collectionStore.receiptById(receiptId.value))
 const displayReceipt = computed(() => savedReceipt.value || diningStore.view.previewReceipt)
 const shortId = computed(() => displayReceipt.value.id.split('-').pop()?.toUpperCase() || 'DINING')
@@ -78,6 +102,7 @@ const goBack = () => runAction(() => navigation.back(isSavedView.value ? 'receip
 function checkReceipt() {
   if (!applicationStore.ready) return
   return runAction(async () => {
+    if (!receiptId.value) {try {await restoreRoom()} catch (error) {if (!roomStore.view.snapshot) throw error}}
     if (receiptId.value && !savedReceipt.value) await navigation.open('receipts', 'replace')
     else if (!receiptId.value && !diningStore.view.canFinish) await navigation.open('menu', 'replace')
   })
@@ -105,8 +130,37 @@ function finish(collectReceipt: boolean) {
   })
 }
 
-const endDining = () => finish(false)
-const save = () => finish(true)
+function confirmSingle(collect: boolean) {
+  const restaurant = displayReceipt.value.restaurant
+  uni.showModal({title: '结算当前餐厅', content: '将结算「' + restaurant + '」，其他餐厅草稿将被丢弃。', success: result => {if (result.confirm) finish(collect)}})
+}
+const endDining = () => confirmSingle(false)
+const save = () => confirmSingle(true)
+
+function endRoom() {
+  if (finishing.value || roomStore.view.status !== 'online') return
+  const expectedRevision = roomStore.view.snapshot?.revision
+  const restaurantId = diningStore.view.session.restaurantId
+  const restaurantName = displayReceipt.value.restaurant
+  uni.showModal({title: '结束整桌用餐', content: '仅结算「' + restaurantName + '」，待选菜品会计入结果，其他餐厅草稿将被丢弃。结束后每人独立选择是否收藏。', success: result => {
+    if (result.confirm) void runAction(async () => {
+      finishing.value = true
+      try {await roomInput.execute({command: 'end', params: {expectedRevision, restaurantId}})} finally {finishing.value = false}
+    })
+  }})
+}
+function finishShared(collectReceipt: boolean) {
+  if (finishing.value || !roomStore.view.snapshot?.receipt) return
+  void runAction(async () => {
+    finishing.value = true
+    try {
+      saveRoom.execute({receipt: JSON.parse(JSON.stringify(roomStore.view.snapshot!.receipt)), collectReceipt})
+      await roomInput.execute({command: 'leave', params: {}})
+      uni.showToast({title: collectReceipt ? '已保存到小票夹和点餐明细' : '已保存到点餐明细', icon: 'none'})
+      await navigation.open(collectReceipt ? 'mine' : 'setup', 'reset')
+    } finally {finishing.value = false}
+  })
+}
 
 function confirmDelete() {
   uni.showModal({
@@ -121,6 +175,7 @@ function confirmDelete() {
 </script>
 
 <style scoped>
+.room-result-note {display:block;margin:24rpx 32rpx;color:#a66c38;font-size:26rpx;text-align:center}
 .result-page {
   min-height: 100vh;
   background: #ffead3;

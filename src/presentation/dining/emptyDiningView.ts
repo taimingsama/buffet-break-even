@@ -4,7 +4,7 @@ import type {BreakEvenView} from '../shared/BreakEvenView'
 export function emptyDiningView(): DiningView.ViewModel {
     const result: BreakEvenView = {difference: -200, percent: 0, isBreakEven: false, verdict: 'below'}
     return {
-        session: {active: false, id: '', ticketPrice: 200, diningMode: '单人', selected: {}, rounds: []},
+        session: {hasAnyDraft: false, active: false, id: '', ticketPrice: 200, diningMode: '单人', selected: {}, rounds: []},
         selectedLines: [],
         currentRoundValue: 0,
         displayValue: 0,

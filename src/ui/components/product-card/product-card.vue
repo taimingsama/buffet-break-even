@@ -5,14 +5,17 @@
     </view>
     <view class="food-info">
       <text class="food-name">{{ product.name }}</text>
-      <view>
+      <view class="food-value">
         <text class="value-label">价值</text>
         <text class="food-price">¥{{ formatPrice(product.price) }}</text>
       </view>
     </view>
-    <view class="add-control">
-      <view class="add-button flex-center" hover-class="button-pressed" @tap="$emit('add', product.id)">
-        <text class="iconfont icon-tianjia"/>
+    <view v-if="!readonly" class="add-control">
+      <view class="add-button flex-center" :class="'button-' + phase" :style="{'animation-duration': PRESS_ANIMATION_MS + 'ms'}" hover-class="none"
+            @touchstart="press" @touchend="release" @touchcancel="release"
+            @mousedown="press" @mouseup="release" @mouseleave="release"
+            @animationend="animationEnd" @tap="$emit('add', product.id)">
+        <text>+</text>
       </view>
       <view v-if="count" class="count-badge flex-center">{{ count }}</view>
     </view>
@@ -22,15 +25,18 @@
 <script setup lang="ts">
 import type {ProductView} from '@/presentation/dining/ProductView'
 import {formatPrice} from '@/utils/format'
+import {PRESS_ANIMATION_MS, usePressFeedback} from '@/ui/composables/usePressFeedback'
 
-defineProps<{ product: ProductView; count?: number }>()
+const {phase, press, release, animationEnd} = usePressFeedback()
+
+defineProps<{ product: ProductView; count?: number; readonly?: boolean }>()
 defineEmits<{ (event: 'add', id: string): void }>()
 </script>
 
 <style scoped>
 .product-card {
   height: 186rpx;
-  border-radius: 26rpx;
+  border-radius: 30rpx;
   background: white;
   margin-bottom: 18rpx;
   padding: 22rpx;
@@ -56,14 +62,15 @@ defineEmits<{ (event: 'add', id: string): void }>()
 .food-info {
   flex: 1;
   min-width: 0;
-  padding-left: 22rpx;
+  padding-left: 24rpx;
+  padding-right: 12rpx;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 18rpx;
 }
 
 .food-name {
-  font-size: 29rpx;
+  font-size: 32rpx;
   font-weight: 900;
   overflow: hidden;
   white-space: nowrap;
@@ -75,9 +82,16 @@ defineEmits<{ (event: 'add', id: string): void }>()
   font-size: 24rpx;
 }
 
+.food-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  white-space: nowrap;
+}
+
 .food-price {
   color: #ff6331;
-  font-size: 31rpx;
+  font-size: 36rpx;
   font-weight: 900;
 }
 
@@ -96,13 +110,34 @@ defineEmits<{ (event: 'add', id: string): void }>()
   color: white;
   font-size: 52rpx;
   box-shadow: 0 12rpx 22rpx rgba(255, 98, 48, .23);
+  line-height: 1;
 }
 
-/* uni-app 通过 hover-class 动态附加此类。 */
-/*noinspection CssUnusedSymbol */
-.button-pressed {
+.button-pressing {
+  animation-name: press-in;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+.button-held {
   transform: scale(.94);
   opacity: .9;
+}
+
+.button-releasing {
+  animation-name: press-out;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes press-in {
+  from {transform: scale(1);opacity: 1}
+  to {transform: scale(.94);opacity: .9}
+}
+
+@keyframes press-out {
+  from {transform: scale(.94);opacity: .9}
+  to {transform: scale(1);opacity: 1}
 }
 
 .count-badge {

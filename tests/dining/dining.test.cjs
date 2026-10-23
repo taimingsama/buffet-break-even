@@ -124,7 +124,7 @@ test('用户按分类与等级筛选菜品，目录查询不泄露内部引用',
   const menu = new ProductCatalog(catalog)
   assert.equal(menu.filter('饮料').length, 1)
   assert.equal(menu.filter('饮料', ['牛牛']).length, 0)
-  assert.equal(menu.filter('我的最爱')[0].id, 'beef')
+  assert.equal(menu.filter('我的最爱').length, 0)
   menu.filter('饮料')[0].price = 999
   assert.equal(menu.filter('饮料')[0].price, 7.5)
 })
@@ -435,7 +435,7 @@ test('全局组合根注册全部公共 Port.In，应用实例隔离且新实例
   assert.equal(first.store.view.displayValue, 8)
   assert.equal(second.store.view.session.active, false)
   assert.notEqual(first.services.get(inputs.BeginSessionInput.Token), second.services.get(inputs.BeginSessionInput.Token))
-  const response = first.execute(catalog.GetMenuInput, { category: '我的最爱', levels: [] })
+  const response = first.execute(catalog.GetMenuInput, { category: '超值版', levels: [] })
   response.products[0].price = 999
   assert.equal(first.store.view.displayValue, 8)
   first.execute(inputs.CompleteDiningInput, { collectReceipt: true })
@@ -597,10 +597,10 @@ test('真实组合根保存失败时三个 Store 保持原值，重试一次写�
   assert.throws(() => app.execute('CompleteDining', { collectReceipt: true }), /保存失败/)
   assert.equal(app.dining.view, before[0]); assert.equal(app.history.view, before[1]); assert.equal(app.collection.view, before[2])
   assert.equal(writes, count)
-  assert.equal(data.get('buffet-state-v3').session.active, true)
+  assert.equal(data.get('buffet-state-v4').session.active, true)
   const seen = []
   const stops = [app.dining, app.history, app.collection].map(store => watch(() => store.view, () => {
-    const saved = data.get('buffet-state-v3')
+    const saved = data.get('buffet-state-v4')
     assert.equal(saved.session.active, false)
     assert.equal(saved.records.length, 1)
     assert.equal(saved.receipts.length, 1)
@@ -635,6 +635,6 @@ test('删除记录和收藏各自更新自己的 Store，不重建当前用餐�
   assert.equal(app.collection.view.receipts.length, 0)
   assert.equal(app.history.view, history)
   assert.equal(app.dining.view, dining)
-  assert.equal(data.get('buffet-state-v3').records.length, 0)
-  assert.equal(data.get('buffet-state-v3').receipts.length, 0)
+  assert.equal(data.get('buffet-state-v4').records.length, 0)
+  assert.equal(data.get('buffet-state-v4').receipts.length, 0)
 })

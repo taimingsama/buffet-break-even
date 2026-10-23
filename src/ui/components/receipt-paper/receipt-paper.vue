@@ -1,12 +1,14 @@
 <template>
   <view class="receipt">
     <text class="receipt-title">PAGER MESSAGE</text>
+    <text v-if="restaurant" class="receipt-restaurant">{{ restaurant }}{{ typeName ? ' · ' + typeName : '' }}</text>
     <view class="receipt-dash"/>
     <view class="receipt-meta">
       <text>ID: {{ receiptId }}</text>
       <text>{{ dateTime }}</text>
     </view>
     <view class="receipt-dash"/>
+    <text v-if="participants?.length" class="receipt-participants">用餐人：{{ participants.join('、') }}</text>
     <text class="verdict">{{ resultTitle }}</text>
     <text class="verdict-copy">{{ resultCopy }}</text>
     <view class="receipt-dash"/>
@@ -49,6 +51,9 @@ import {formatPrice} from '@/utils/format'
 import type {BreakEvenView} from '@/presentation/shared/BreakEvenView'
 
 const props = defineProps<{
+  restaurant?: string
+  typeName?: string
+  participants?: readonly string[]
   receiptId: string
   dateTime: string
   price: number
@@ -70,6 +75,8 @@ const resultCopy = computed(() => result.value.isBreakEven
 </script>
 
 <style scoped>
+.receipt-restaurant {display:block;text-align:center;font-size:25rpx;margin-top:18rpx;overflow-wrap:anywhere;color:#6c625a}
+.receipt-participants {display:block;font-size:24rpx;line-height:1.8;margin-bottom:20rpx;overflow-wrap:anywhere;color:#6c625a}
 .receipt {
   margin: 0 62rpx 30rpx;
   padding: 46rpx 32rpx 56rpx;

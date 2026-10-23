@@ -1,4 +1,4 @@
-export type Destination = 'setup' | 'menu' | 'mine' | 'receipts' | 'records'
+export type Destination = 'setup' | 'menu' | 'mine' | 'receipts' | 'records' | 'room' | 'custom-menu' | 'creator' | 'my-restaurants'
 
 export interface BuffetNavigation {
     open(destination: Destination, mode?: 'push' | 'replace' | 'reset'): Promise<void>
@@ -8,6 +8,12 @@ export interface BuffetNavigation {
     toResult(receiptId?: string): Promise<void>
 
     toRecord(recordId: string): Promise<void>
+
+    toCustomMenu(restaurantId?: string): Promise<void>
+
+    toCustomDining(restaurantId?: string): Promise<void>
+
+    toMenuPreview(previewId: string): Promise<void>
 
     back(fallback: Destination): Promise<void>
 }

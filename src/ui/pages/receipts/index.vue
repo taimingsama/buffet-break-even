@@ -13,7 +13,7 @@
         </view>
         <view class="thumb-caption">
           <text>{{ index + 1 }}. {{ item.restaurant }}</text>
-          <text>{{ item.date }}</text>
+          <text>{{ formatDateTime(item.date) }}</text>
         </view>
       </view>
     </view>
@@ -31,6 +31,7 @@ import InitializationGate from '@/ui/components/initialization-gate/initializati
 import {useRequired} from '@/ui/composables/useRequired'
 import {runAction} from '@/ui/composables/runAction'
 import {BuffetNavigation} from '@/ui/navigation/BuffetNavigation'
+import {formatDateTime} from '@/ui/format/time'
 
 const navigation = useRequired<BuffetNavigation>(BuffetNavigation)
 import {useCollectionStore} from '@/ui/stores/useCollectionStore'
@@ -48,11 +49,14 @@ const openReceipt = (id: string) => runAction(() => navigation.toResult(id))
 .receipt-grid {
   padding: 20rpx 22rpx;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20rpx;
 }
 
 .receipt-thumb {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   border-radius: 24rpx;
   overflow: hidden;
   background: white;
@@ -61,51 +65,84 @@ const openReceipt = (id: string) => runAction(() => navigation.toResult(id))
 }
 
 .thumb-paper {
-  height: 244rpx;
+  height: 300rpx;
+  flex-shrink: 0;
+  overflow: hidden;
   padding: 20rpx;
   background: repeating-linear-gradient(0deg, #fff 0, #fff 6rpx, #faf9f5 7rpx, #faf9f5 8rpx);
   display: flex;
   flex-direction: column;
   gap: 12rpx;
   font-size: 18rpx;
+  line-height: 24rpx;
   font-weight: 800;
   box-sizing: border-box;
 }
 
 .paper-title {
+  flex-shrink: 0;
   text-align: center;
   letter-spacing: 2rpx;
   font-size: 20rpx;
+  line-height: 26rpx;
 }
 
 .paper-price {
+  flex-shrink: 0;
   color: #ff6331;
   text-align: center;
   font-size: 24rpx;
+  line-height: 30rpx;
 }
 
 .thumb-paper view {
   display: flex;
   justify-content: space-between;
+  flex-shrink: 0;
+  min-width: 0;
+  gap: 12rpx;
+}
+
+.thumb-paper view text:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.thumb-paper view text:last-child {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .thumb-caption {
-  height: 100rpx;
+  height: 112rpx;
+  flex-shrink: 0;
+  overflow: hidden;
   padding: 20rpx;
   display: flex;
   flex-direction: column;
   gap: 10rpx;
   box-sizing: border-box;
+  font-size: 22rpx;
+  line-height: 26rpx;
+  color: #999;
+}
+
+.thumb-caption text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .thumb-caption text:first-child {
   font-size: 28rpx;
+  line-height: 34rpx;
   font-weight: 900;
-}
-
-.thumb-caption text:last-child {
-  font-size: 22rpx;
-  color: #999;
+  color: #302d2a;
 }
 
 .empty-state {

@@ -11,7 +11,7 @@ test('初始化失败保留已有数据和展示状态，恢复后重试无需�
   const saved = {version: 3, session: session.toSnapshot(), records: [record], receipts: [record]}
   let fail = true
   let writes = 0
-  const app = application({getStorageSync: key => {if (fail) throw Error('unavailable'); return key === 'buffet-state-v3' ? saved : undefined}, setStorageSync: () => writes++})
+  const app = application({getStorageSync: key => {if (fail) throw Error('unavailable'); return key === 'buffet-state-v4' ? saved : undefined}, setStorageSync: () => writes++})
   const before = [app.dining.view, app.history.view, app.collection.view]
   assert.equal(app.status.view.status, 'idle')
   assert.equal(app.bootstrap.initialize(), false)
@@ -108,7 +108,7 @@ test('持久化格式转换仍拒绝未知版本和损坏数据，不回退覆�
   const {encodeSnapshot, decodeSnapshot} = app.load('infrastructure/persistence/serialization/SnapshotCodec')
   const snapshot = {session: Session.empty().toSnapshot(), records: [], receipts: []}
   const encoded = encodeSnapshot(snapshot)
-  assert.equal(encoded.version, 3)
+  assert.equal(encoded.version, 4)
   assert.deepEqual(plain(decodeSnapshot(encoded)), plain(snapshot))
   assert.throws(() => decodeSnapshot({...encoded, version: 9}), /未知存储版本/)
   assert.throws(() => decodeSnapshot({...encoded, receipts: [{id: 'broken'}]}))

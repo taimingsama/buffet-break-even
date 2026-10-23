@@ -6,7 +6,7 @@ export namespace BeginSessionInput {
     export const Token = Symbol('BeginSessionInput')
 
     export class Request {
-        constructor(public ticketPrice: number, public diningMode: string, public replaceActive?: boolean) {
+        constructor(public ticketPrice: number, public diningMode: string, public replaceActive?: boolean, public typeId?: string, public restaurantId?: string) {
         }
     }
 }

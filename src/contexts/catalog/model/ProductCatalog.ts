@@ -9,8 +9,7 @@ export class ProductCatalog {
     }
 
     filter(category: string, levels: readonly string[] = []): Product[] {
-        return this.products.filter(product => (category === '我的最爱'
-                ? ['beef', 'salmon', 'icecream'].includes(product.id) : product.category === category)
+        return this.products.filter(product => (!category || product.category === category)
             && (!levels.length || levels.includes(product.level))).map(product => ({...product}))
     }
 }

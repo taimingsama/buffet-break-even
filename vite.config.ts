@@ -1,9 +1,10 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import uni from "@dcloudio/vite-plugin-uni";
 import { fileURLToPath } from "node:url";
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({mode}) => ({
+  define: {__ROOM_SERVER_URL__: JSON.stringify(loadEnv(mode, process.cwd()).VITE_ROOM_SERVER_URL || 'ws://localhost:3001/ws')},
   plugins: [
     uni(),
     {
@@ -17,4 +18,4 @@ export default defineConfig({
       }),
     },
   ],
-});
+}));

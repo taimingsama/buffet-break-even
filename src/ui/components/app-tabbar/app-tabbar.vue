@@ -23,7 +23,7 @@ function reviewSoon() {
   right: 0;
   bottom: 0;
   z-index: 50;
-  height: calc(104rpx + env(safe-area-inset-bottom));
+  height: calc(var(--app-tabbar-height, 104rpx) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   display: flex;
   background: rgba(255, 255, 255, .97);
