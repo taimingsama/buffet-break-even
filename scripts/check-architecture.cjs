@@ -2,9 +2,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
 
-const contextEntry = /^contexts\/(catalog|dining|room)\/public$/
+const contextEntry = /^contexts\/(catalog|dining)\/public$/
 const moduleEntry = /^contexts\/dining\/(session|history|collection|completion)\/public$/
-const contextOf = file => file.match(/^contexts\/(catalog|dining|room)\//)?.[1]
+const contextOf = file => file.match(/^contexts\/(catalog|dining)\//)?.[1]
 const moduleOf = file => file.match(/^(contexts\/dining\/(session|history|collection|completion))\//)?.[1]
 
 function inspectSource(file, source) {
@@ -69,7 +69,7 @@ function inspectSource(file, source) {
     }
     if (publicFile) {
       const allowedTarget = module ? target?.startsWith(`${owner}/application/port/in/`)
-        : context === 'dining' ? moduleEntry.test(target || '') : target?.startsWith(`${owner}/application/port/in/`)
+        : context === 'dining' ? moduleEntry.test(target || '') : target?.startsWith('contexts/catalog/application/port/in/')
       if (!ts.isExportDeclaration(node) || !allowedTarget || !node.exportClause || !ts.isNamedExports(node.exportClause)
         || node.exportClause.elements.some(item => !/Input$/.test((item.propertyName || item.name).text) || !/Input$/.test(item.name.text))) report('公共入口只能具名导出 Input')
     }

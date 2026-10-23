@@ -1,7 +1,0 @@
-node_modules
-dist
-unpackage
-.git
-.idea
-.DS_Store
-*.log
