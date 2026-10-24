@@ -31,11 +31,15 @@
       <text class="empty-icon">📋</text>
       <text>记录不存在</text>
     </view>
+    <app-confirm-dialog :controller="confirmation"/>
   </initialization-gate>
   </view>
 </template>
 
 <script setup lang="ts">
+import AppConfirmDialog from '@/ui/components/app-confirm-dialog/app-confirm-dialog.vue'
+import {useAppDialog} from '@/ui/composables/useAppDialog'
+const confirmation = useAppDialog()
 import InitializationGate from '@/ui/components/initialization-gate/initialization-gate.vue'
 import {computed, ref} from 'vue'
 import {onLoad} from '@dcloudio/uni-app'
@@ -58,7 +62,7 @@ onLoad(query => void runAction(() => {
 }))
 
 function confirmDelete() {
-  uni.showModal({
+  confirmation.open({
     title: '删除记录', content: '确定删除这次用餐记录吗？', confirmColor: '#ff4a45', success: result => {
       if (result.confirm) void runAction(async () => {
         remove.execute({recordId: recordId.value})

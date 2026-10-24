@@ -1,11 +1,17 @@
 import type {ProfileSettings} from './ProfileSettings'
 import type {ProfileView} from '@/presentation/profile/ProfileView'
+import {generateNickname} from './generateNickname'
 
 export class UniProfileSettings implements ProfileSettings {
     constructor(private readonly view: ProfileView) {}
     load() {
         const stored = uni.getStorageSync('buffet-profile-nickname-v1')
-        const nickname = typeof stored === 'string' && stored.trim() && stored.length <= 20 ? stored.trim() : '新手食客'
+        const nickname = typeof stored === 'string' ? stored.trim() : ''
+        if (!nickname || nickname.length > 20) {
+            const generated = generateNickname()
+            this.save(generated)
+            return generated
+        }
         this.view.present(nickname)
         return nickname
     }

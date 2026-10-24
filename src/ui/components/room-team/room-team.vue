@@ -5,9 +5,13 @@
       <text v-for="member in room.members" :key="member.id" class="team-member" @tap="transfer(member)" :class="{away: !member.online}">{{ member.id === room.hostId ? '👑 ' : '' }}{{ member.nickname }}{{ member.id === store.view.memberId ? '（我）' : '' }}{{ !member.online ? ' · 离线' : '' }}</text>
     </scroll-view>
     <text v-if="store.view.status !== 'online' || store.view.message" class="team-status">{{ store.view.message || '正在连接，连接恢复后可继续点菜' }}</text>
+    <app-confirm-dialog :controller="confirmation"/>
   </view>
 </template>
 <script setup lang="ts">
+import AppConfirmDialog from '@/ui/components/app-confirm-dialog/app-confirm-dialog.vue'
+import {useAppDialog} from '@/ui/composables/useAppDialog'
+const confirmation = useAppDialog()
 import {computed} from 'vue'
 import {RoomInput} from '@/contexts/dining/public'
 import {useRequired} from '@/ui/composables/useRequired'
@@ -19,7 +23,7 @@ function transfer(member: {id: string; nickname: string; online: boolean}) {
   const s = room.value
   if (!s || s.hostId !== store.view.memberId || s.status !== 'active' || member.id === s.hostId || !member.online || store.view.status !== 'online' || store.view.busy) return
   const expectedRevision = s.revision
-  uni.showModal({title: '转让房主', content: '确认将房主权限交给「' + member.nickname + '」？', success: result => {
+  confirmation.open({title: '转让房主', content: '确认将房主权限交给「' + member.nickname + '」？', success: result => {
     if (result.confirm) void runAction(() => input.execute({command: 'transferHost', params: {targetMemberId: member.id, expectedRevision}}))
   }})
 }

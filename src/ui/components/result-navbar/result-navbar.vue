@@ -1,12 +1,12 @@
 <template>
-  <view class="result-navbar" :style="navbarStyle">
+  <view class="result-navbar" :class="{'is-inset': inset}" :style="navbarStyle">
     <view class="navbar-content" :style="contentStyle">
-      <view class="back-button flex-center" @tap="emit('back')">
+      <button class="back-button flex-center" :hover-stay-time="0" aria-label="返回" @tap="emit('back')">
         <text class="iconfont icon-fanhui"/>
-      </view>
+      </button>
       <view class="title-copy">
-        <text class="navbar-title">{{ title }}</text>
-        <text class="navbar-subtitle">{{ subtitle }}</text>
+        <text class="navbar-title" :style="{color: titleColor}">{{ title }}</text>
+        <text v-if="subtitle" class="navbar-subtitle" :style="{color: subtitleColor}">{{ subtitle }}</text>
       </view>
     </view>
   </view>
@@ -16,9 +16,16 @@
 const props = withDefaults(defineProps<{
   title?: string
   subtitle?: string
+  titleColor?: string
+  subtitleColor?: string
+  /** The parent page already provides horizontal gutters. */
+  inset?: boolean
 }>(), {
   title: '今日战果',
-  subtitle: '今日用餐记录'
+  subtitle: '今日用餐记录',
+  titleColor: '#342a23',
+  subtitleColor: '#b9a89a',
+  inset: false
 })
 
 const systemInfo = uni.getSystemInfoSync()
@@ -51,16 +58,25 @@ const emit = defineEmits<{ (event: 'back'): void }>()
 }
 
 .back-button {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  border: 0;
   width: 76rpx;
   height: 76rpx;
-  border-radius: 50%;
+  --button-radius: 50%;
   background: rgba(255, 255, 255, .95);
   color: #3e352e;
   box-shadow: 0 12rpx 28rpx rgba(101, 70, 40, .1);
   font-size: 50rpx;
 }
 
+.back-button::after {border: 0}
+.is-inset .navbar-content {padding-left: 0}
+
 .title-copy {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -68,14 +84,18 @@ const emit = defineEmits<{ (event: 'back'): void }>()
 }
 
 .navbar-title {
-  color: #342a23;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 36rpx;
   font-weight: 900;
   line-height: 1.15;
 }
 
 .navbar-subtitle {
-  color: #b9a89a;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 22rpx;
   font-weight: 700;
 }

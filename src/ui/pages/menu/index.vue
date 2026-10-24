@@ -217,10 +217,10 @@ const openTab = (tab: 'menu' | 'mine') => runAction(() => navigation.open(tab, '
 </script>
 
 <style scoped>
-.menu-page.preview-mode {padding-bottom:0}.preview-heading {display:flex;align-items:center;gap:24rpx;padding:24rpx;flex:none}.preview-heading button {margin:0;padding:0 24rpx;line-height:64rpx;background:white;border-radius:32rpx;color:#ae6735;font-size:28rpx}.preview-heading>view {display:flex;flex-direction:column;gap:6rpx}.preview-heading text:first-child {font-size:34rpx;font-weight:900}.preview-heading text:last-child {font-size:23rpx;color:#a18c74}
+.menu-page.preview-mode {padding-bottom:0}.preview-heading {display:flex;align-items:center;gap:24rpx;padding:24rpx;flex:none}.preview-heading button {margin:0;padding:0 24rpx;line-height:64rpx;background:white;--button-radius:32rpx;color:#ae6735;font-size:28rpx}.preview-heading>view {display:flex;flex-direction:column;gap:6rpx}.preview-heading text:first-child {font-size:34rpx;font-weight:900}.preview-heading text:last-child {font-size:23rpx;color:#a18c74}
 .valuation-note {display:block;font-size:22rpx;line-height:1.6;color:#c1bcb6;padding:4rpx 12rpx 16rpx;text-align:center}
 .price-editor {height:100rpx;padding:0 24rpx;background:white;border:3rpx solid #eadabd;border-radius:24rpx;font-size:36rpx}
-.price-save {margin-top:28rpx;background:#ff6331;color:white;border-radius:24rpx;font-size:30rpx}
+.price-save,.price-save[disabled] {margin-top:28rpx;background:#ff6331;color:white;--button-radius:24rpx;font-size:30rpx}
 .room-readonly {opacity:.65;pointer-events:none}
 .menu-page {
   --menu-section-gap: 24rpx;

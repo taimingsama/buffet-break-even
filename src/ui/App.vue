@@ -36,6 +36,28 @@ navigator {
   font-family: inherit;
 }
 
+/* The outline owns its radius; the button itself must not clip its corners. */
+button {
+  overflow: visible;
+  border-radius: var(--button-radius, 36rpx) !important;
+}
+
+button[disabled] {
+  filter: grayscale(40%);
+}
+
+/* Draw the native button outline at its actual size so custom rounded corners
+   do not clip the default doubled-size, half-scaled pseudo-element. */
+button::after {
+  width: 100% !important;
+  height: 100% !important;
+  transform: none !important;
+  border-width: 1rpx !important;
+  border-radius: var(--button-radius, 36rpx) !important;
+
+  pointer-events: none;
+}
+
 /* 图标继承控件字号，使用图标字体自身的字重和行高。 */
 /* 全局工具类由其他页面和组件引用。 */
 /*noinspection CssUnusedSymbol */

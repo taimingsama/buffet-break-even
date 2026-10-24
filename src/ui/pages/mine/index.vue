@@ -35,8 +35,6 @@
 
     <text class="section-title">更多服务</text>
     <view class="settings-card">
-      <mine-setting-row icon="✏️" label="创造者模式" icon-theme="yellow" compact @click="runAction(() => navigation.open('creator'))"/>
-      <mine-setting-row icon="👨‍🍳" label="我的餐厅" icon-theme="yellow" compact @click="runAction(() => navigation.toCustomDining())"/>
       <mine-setting-row icon="🎫" label="餐券福利" icon-theme="yellow" compact/>
       <mine-setting-row icon="👥" label="自助同好群" icon-theme="teal" compact :divider="false"/>
     </view>
@@ -101,7 +99,7 @@ const openTab = (tab: 'menu' | 'mine') => runAction(() => navigation.open(tab, '
 <style scoped>
 .nickname-note {display:block;font-size:26rpx;color:#9a7d65;margin-bottom:24rpx}
 .nickname-input {height:100rpx;padding:0 24rpx;background:white;border:3rpx solid #eadabd;border-radius:24rpx;font-size:32rpx}
-.nickname-save {margin-top:28rpx;background:#ff6331;color:white;border-radius:26rpx;font-size:30rpx;font-weight:800}
+.nickname-save,.nickname-save[disabled] {margin-top:28rpx;background:#ff6331;color:white;--button-radius:26rpx;font-size:30rpx;font-weight:800}
 .mine-page {
   min-height: 100vh;
   padding-right: 22rpx;

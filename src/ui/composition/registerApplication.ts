@@ -49,9 +49,10 @@ export function registerApplication(app: App, pinia: Pinia): void {
     app.provide<DiscardSessionInput>(DiscardSessionInput.Token, dining.closeDining)
     app.provide<ChangeTicketPriceInput>(ChangeTicketPriceInput.Token, dining.changeTicketPrice)
     app.provide<RoomInput>(RoomInput.Token, createRoom(useRoomStore(pinia), dining.saveRoomResult, catalog.getCatalog, productAppearance))
-    app.provide<ProfileSettings>(ProfileSettings, new UniProfileSettings(useProfileStore(pinia)))
+    const profile = new UniProfileSettings(useProfileStore(pinia))
+    app.provide<ProfileSettings>(ProfileSettings, profile)
     app.provide(ApplicationBootstrap.Token, new ApplicationBootstrap({
-        dining: dining.loadDining, history: dining.loadHistory, collection: dining.loadCollection,
+        dining: dining.loadDining, history: dining.loadHistory, collection: dining.loadCollection, profile,
     }, database.transaction.bind(database), useApplicationStore(pinia)))
     app.provide<BuffetNavigation>(BuffetNavigation, new UniBuffetNavigation(uni, () => getCurrentPages().length))
 }

@@ -13,7 +13,7 @@ const root = path.resolve(__dirname, '../../src')
 function harness(options = {}) {
   const cache = new Map()
   const services = new Map()
-  const hooks = { onLoad: [], onShow: [], onHide: [], onUnload: [] }
+  const hooks = { onLoad: [], onShow: [], onHide: [], onUnload: [], onBackPress: [] }
   const toasts = []
   const modals = []
   const navigation = []
@@ -22,7 +22,7 @@ function harness(options = {}) {
     getStorageSync: key => { if (options.failRead?.()) throw Error('unavailable'); return storage.get(key) },
     setStorageSync: (key, value) => storage.set(key, JSON.parse(JSON.stringify(value))),
     showToast: options => toasts.push(options.title),
-    showModal: options => {modals.push(options.title); options.success({ confirm: true })},
+    showModal: options => {modals.push(options.title); throw Error('页面应使用 app-dialog')},
     getSystemInfoSync: () => ({ statusBarHeight: 0 }), upx2px: value => value
   }
   function load(file) {
@@ -42,7 +42,7 @@ function harness(options = {}) {
     vm.runInNewContext(outputText, { module, exports: module.exports, uni: platform, Error,
       require(name) {
         if (name === 'vue') return { ...vue, inject: token => services.get(token) }
-        if (name === '@dcloudio/uni-app') return { onLoad: callback => hooks.onLoad.push(callback), onShow: callback => hooks.onShow.push(callback), onHide: callback => hooks.onHide.push(callback), onUnload: callback => hooks.onUnload.push(callback) }
+        if (name === '@dcloudio/uni-app') return { onLoad: callback => hooks.onLoad.push(callback), onShow: callback => hooks.onShow.push(callback), onHide: callback => hooks.onHide.push(callback), onUnload: callback => hooks.onUnload.push(callback), onBackPress: callback => hooks.onBackPress.push(callback) }
         if (name.endsWith('.vue')) return { default: {} }
         if (name.startsWith('@/')) return load(name.slice(2))
         if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name))
@@ -77,6 +77,18 @@ const settle = async () => {for (let i = 0; i < 6; i++) await flush()}
 const roomSnapshot = (extra = {}) => ({id: 'shared-room-1', code: '123456', revision: 7, hostId: 'host-1', status: 'active',
   ticketPrice: 288, typeId: 'sukiyaki', drafts: {niuniu: {selected: {'niuniu-p1-1': 2}, rounds: []}}, members: [{id: 'host-1', nickname: '团长', online: true}], receipt: null, ...extra})
 
+test('应用启动时为新用户保存随机昵称，打开我的页面后保持一致', async () => {
+  const app=harness()
+  const nickname=app.storage.get('buffet-profile-nickname-v1')
+  assert.equal(typeof nickname,'string')
+  assert.equal(nickname.length,6)
+  assert.equal(app.profile.nickname,nickname)
+  app.page('mine')
+  app.hooks.onShow.at(-1)()
+  await settle()
+  assert.equal(app.profile.nickname,nickname)
+})
+
 test('setup 滚筒选中种类用于新用餐，创造者和我的餐厅分为独立入口', async () => {
   const app=harness(),setup=app.page('setup')
   setup.drum.choose(3)
@@ -95,6 +107,23 @@ test('setup 滚筒选中种类用于新用餐，创造者和我的餐厅分为�
   assert.equal(setup.cuisineTypes.some(t=>t.id==='custom'),false)
 })
 
+test('setup 底部面板随吸附预告切换，拖动取消时恢复且保留门票输入', () => {
+  const app=harness(),setup=app.page('setup')
+  setup.ticketInput.value='288'
+  setup.drum.begin({clientX:200})
+  setup.drum.move({clientX:250})
+  assert.equal(setup.panelTypeId.value,'creator')
+  assert.equal(setup.typeId.value,'sukiyaki')
+  setup.drum.end({type:'touchcancel'})
+  assert.equal(setup.panelTypeId.value,'sukiyaki')
+  assert.equal(setup.ticketInput.value,'288')
+  setup.drum.begin({clientX:200})
+  setup.drum.move({clientX:250})
+  setup.drum.end()
+  assert.equal(setup.panelTypeId.value,'creator')
+  assert.equal(setup.typeId.value,'creator')
+})
+
 test('新建餐厅编辑、预览不提前保存，保存后同时出现在创造者和我的餐厅，可用于用餐', async () => {
   const app=harness(),editor=app.page('custom-menu')
   editor.restaurant.value.name='我的私厨'
@@ -106,8 +135,10 @@ test('新建餐厅编辑、预览不提前保存，保存后同时出现在创�
   assert.equal(editor.restaurant.value.products[0].unit,'份')
   assert.equal(app.input('GetCatalog').execute({typeId:'custom'}).catalog.restaurants.length,0)
   const id=editor.restaurant.value.id
+  const navigationCount = app.navigation.length
   await editor.saveAll()
-  assert.deepEqual(app.navigation.at(-1),['back','creator'])
+  assert.equal(app.navigation.length,navigationCount)
+  assert.equal(editor.isDirty.value,false)
   const creator=app.page('creator')
   app.hooks.onShow.at(-1)(); await settle()
   assert.equal(creator.library.restaurants.value[0].id,id)
@@ -124,6 +155,61 @@ test('新建餐厅编辑、预览不提前保存，保存后同时出现在创�
   setup.start('单人');await settle()
   assert.equal(app.store.view.session.restaurantId,id)
   assert.equal(app.store.view.session.catalog.typeId,'custom')
+})
+
+test('餐厅编辑按实际差异启用保存，保存留在当前页，未修改或改回原值可直接退出', async () => {
+  const app=harness(),editor=app.page('custom-menu')
+  assert.equal(editor.isDirty.value,false)
+  editor.restaurant.value.name='测试餐厅'
+  editor.editProduct()
+  editor.form.value.name='牛肉';editor.form.value.price='20'
+  await editor.applyForm()
+  assert.equal(editor.isDirty.value,true)
+  await editor.saveAll()
+  assert.equal(editor.isDirty.value,false)
+  assert.equal(app.navigation.length,0)
+  const toastCount=app.toasts.length
+  await editor.saveAll()
+  assert.equal(app.toasts.length,toastCount)
+  editor.restaurant.value.name='修改名称'
+  assert.equal(editor.isDirty.value,true)
+  editor.restaurant.value.name='测试餐厅'
+  assert.equal(editor.isDirty.value,false)
+  assert.equal(app.hooks.onBackPress.at(-1)(),false)
+  await editor.goBack()
+  assert.equal(editor.showLeaveDialog.value,false)
+  assert.deepEqual(app.navigation.at(-1),['back','creator'])
+})
+
+test('返回时可保存并离开或放弃；保存校验或存储失败保持修改并留在编辑页', async () => {
+  const app=harness(),editor=app.page('custom-menu')
+  editor.restaurant.value.name='未保存餐厅'
+  assert.equal(app.hooks.onBackPress.at(-1)(),true)
+  assert.equal(editor.showLeaveDialog.value,true)
+  await editor.saveAndLeave()
+  assert.equal(app.navigation.length,0)
+  assert.equal(editor.isDirty.value,true)
+  assert.equal(editor.showLeaveDialog.value,true)
+  editor.editProduct()
+  editor.form.value.name='牛肉';editor.form.value.price='20'
+  await editor.applyForm()
+  const saveRestaurant=editor.library.saveRestaurant
+  editor.library.saveRestaurant=()=>{throw Error('存储失败')}
+  await editor.saveAndLeave()
+  assert.equal(editor.saving.value,false)
+  assert.equal(editor.isDirty.value,true)
+  assert.equal(app.navigation.length,0)
+  editor.library.saveRestaurant=saveRestaurant
+  await editor.saveAndLeave()
+  assert.equal(editor.isDirty.value,false)
+  assert.deepEqual(app.navigation.at(-1),['back','creator'])
+  editor.restaurant.value.name='放弃这个名字'
+  editor.goBack()
+  assert.equal(editor.showLeaveDialog.value,true)
+  const persisted=app.input('GetCatalog').execute({typeId:'custom'}).catalog.restaurants[0]
+  await editor.discardAndLeave()
+  assert.equal(persisted.name,'未保存餐厅')
+  assert.equal(app.input('GetCatalog').execute({typeId:'custom'}).catalog.restaurants[0].name,'未保存餐厅')
 })
 
 test('我的餐厅作为种类直接设置门票并开始，用餐包含所有已完成餐厅菜单', async () => {
@@ -199,10 +285,39 @@ test('编辑只更新当前餐厅；旧自定义数据保留，删除配置不�
   assert.equal(catalog.restaurants[1].name,'old-b')
   app.input('BeginSession').execute({ticketPrice:100,diningMode:'单人',typeId:'custom',restaurantId:'old-b'})
   const creator=app.page('creator')
-  creator.remove('old-b');await settle()
+  creator.remove('old-b')
+  assert.equal(app.input('GetCatalog').execute({typeId:'custom'}).catalog.restaurants.length,2)
+  creator.confirmation.confirm();await settle()
   assert.equal(app.input('GetCatalog').execute({typeId:'custom'}).catalog.restaurants.length,1)
   assert.equal(app.store.view.session.catalog.restaurants.length,2)
   assert.equal(app.store.view.session.restaurantId,'old-b')
+})
+
+test('自定义确认框取消不删除，确认只执行一次，关闭菜品删除确认仍保留编辑窗口', async () => {
+  const app=harness(),editor=app.page('custom-menu')
+  editor.restaurant.value.name='测试餐厅'
+  editor.editProduct()
+  editor.form.value.name='牛肉';editor.form.value.price='20'
+  await editor.applyForm()
+  await editor.saveAll()
+  const productId=editor.restaurant.value.products[0].id
+  editor.editProduct(productId)
+  editor.deleteEntry()
+  assert.equal(editor.confirmation.dialog.value.title,'确认删除')
+  assert.equal(editor.restaurant.value.products.length,1)
+  editor.confirmation.cancel()
+  assert.equal(editor.form.value.id,productId)
+  assert.equal(editor.restaurant.value.products.length,1)
+  editor.deleteEntry()
+  editor.confirmation.confirm()
+  editor.confirmation.confirm()
+  assert.equal(editor.restaurant.value.products.length,0)
+  assert.equal(editor.form.value,null)
+  const creator=app.page('creator')
+  creator.remove(editor.restaurant.value.id)
+  creator.confirmation.cancel()
+  assert.equal(app.input('GetCatalog').execute({typeId:'custom'}).catalog.restaurants.length,1)
+  assert.equal(app.modals.length,0)
 })
 
 test('创建自定义多人房间上传已保存目录，并在创建后选中所选餐厅', async () => {
@@ -258,9 +373,21 @@ test('退出有待选或有轮次的单人用餐保留会话，重新开始仍�
     await app.hooks.onUnload.at(-1)()
     await settle()
     assert.equal(app.store.view.session.active, true)
-    app.page('setup').start('单人')
+    const setup = app.page('setup')
+    setup.start('单人')
     await settle()
-    assert.ok(app.modals.includes('已有进行中的用餐'))
+    assert.equal(setup.confirmation.dialog.value.title,'已有进行中的用餐')
+    const navigationCount=app.navigation.length
+    setup.confirmation.close()
+    await settle()
+    assert.equal(setup.confirmation.dialog.value,null)
+    assert.equal(app.navigation.length,navigationCount)
+    assert.equal(app.store.view.session.active,true)
+    setup.start('单人')
+    setup.confirmation.cancel()
+    await settle()
+    assert.equal(app.store.view.session.active,true)
+    assert.deepEqual(app.navigation.at(-1),['open','menu'])
   }
 })
 
@@ -368,7 +495,9 @@ test('加入弹窗校验六位房间号，使用个人昵称，成功进入菜�
   await settle()
   const request = requests.find(request => request.command === 'join')
   assert.equal(request.params.code, '123456')
-  assert.equal(request.params.nickname, '新手食客')
+  assert.equal(request.params.nickname, app.profile.nickname)
+  assert.equal(request.params.nickname, app.storage.get('buffet-profile-nickname-v1'))
+  assert.equal(request.params.nickname.length, 6)
   assert.deepEqual(app.navigation.at(-1), ['open', 'menu'])
 })
 
@@ -426,6 +555,8 @@ test('多人复用结果页，房主结束后再由个人选择收藏', async ()
   assert.equal(result.isRoomView.value, true)
   assert.equal(result.displayReceipt.value.value, 20)
   result.endRoom()
+  assert.equal(requests.length,0)
+  result.confirmation.confirm()
   await settle()
   assert.equal(requests.at(-1).command, 'end')
   assert.equal(result.roomEnded.value, true)
@@ -509,10 +640,34 @@ test('真实页面事件从开始、菜单加减、提交到结果收藏，展�
   assert.equal(result.displayReceipt.value.value, 21)
   assert.equal(app.store.view.session.rounds.length, 1)
   result.save()
+  assert.equal(app.collection.view.receipts.length,0)
+  result.confirmation.confirm()
   await flush()
   assert.equal(app.history.view.records[0].rounds.length, 2)
   assert.equal(app.collection.view.receipts[0].value, 21)
   assert.deepEqual(app.navigation.at(-1), ['open', 'mine', 'reset'])
+})
+
+test('待保存结果在出票结束后更新打印状态，收藏详情不播放出票且状态独立', async () => {
+  const app = harness()
+  app.input('BeginSession').execute({ticketPrice:20,diningMode:'单人'})
+  app.input('ChangeSelection').execute({productId:'beef',change:1})
+  const pending = app.page('result')
+  assert.equal(pending.isSavedView.value,false)
+  assert.equal(pending.isPrinting.value,true)
+  pending.onPrintEnd({animationName:'unrelated'})
+  assert.equal(pending.printComplete.value,false)
+  pending.onPrintEnd({detail:{animationName:'receipt-feed-scoped'}})
+  assert.equal(pending.printComplete.value,true)
+  assert.equal(pending.isPrinting.value,false)
+  assert.equal(app.collection.view.receipts.length,0)
+  app.input('CompleteDining').execute({collectReceipt:true})
+  const saved = app.page('result')
+  saved.receiptId.value = app.collection.view.receipts[0].id
+  assert.equal(saved.isSavedView.value,true)
+  assert.equal(saved.isPrinting.value,false)
+  assert.equal(saved.printComplete.value,false)
+  assert.equal(saved.displayReceipt.value.id,saved.receiptId.value)
 })
 
 test('页面无效输入展示错误且不导航；多个结果页的选择状态互不影响', async () => {
@@ -537,6 +692,8 @@ test('页面无效输入展示错误且不导航；多个结果页的选择状�
   const detail = app.page('record-detail')
   detail.recordId.value = receiptId
   detail.confirmDelete()
+  assert.equal(app.history.view.records.length,1)
+  detail.confirmation.confirm()
   await flush()
   assert.equal(app.history.view.records.length, 0)
   assert.equal(app.collection.view.receipts.length, 1)

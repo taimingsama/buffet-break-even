@@ -3,8 +3,8 @@
     <initialization-gate>
     <result-navbar @back="goBack"/>
 
-    <view class="printer">
-      <view class="printer-shell">
+    <view class="receipt-stage" :class="{'saved-receipt': isSavedView}">
+      <view v-if="!isSavedView" class="printer-shell">
         <view class="printer-face">
           <view class="printer-lights">
             <view>
@@ -18,15 +18,17 @@
           </view>
           <view class="printer-screen flex-center">
             <text>BUFFET-CALC</text>
-            <text class="printing">PRINTING...</text>
+            <text class="printing" aria-live="polite">{{ printComplete ? 'PRINT COMPLETE' : 'PRINTING...' }}</text>
           </view>
-          <view class="camera-key flex-center">
+          <depth-button class="camera-key" :depth="8" shadow-color="#aaa299" ambient-shadow="0 14rpx 18rpx rgba(0, 0, 0, .16)" label="保存小票到相册" :disabled="album.busy.value || isPrinting" @click="saveToAlbum">
             <text class="camera-icon iconfont icon-xiangji"/>
-          </view>
+          </depth-button>
         </view>
         <view class="printer-slot"/>
       </view>
-      <receipt-paper
+      <view v-if="savedReceipt || diningStore.view.canFinish" class="receipt-output" :class="{'is-feeding': isPrinting}" @animationend="onPrintEnd">
+        <receipt-paper
+          :detached="isSavedView"
           :restaurant="displayReceipt.restaurant"
           :type-name="displayReceipt.typeName"
           :participants="displayReceipt.participants"
@@ -36,8 +38,17 @@
           :value="displayReceipt.value"
           :lines="displayReceipt.lines"
           :result="displayReceipt.result"
+          @save-image="saveToAlbum"
       />
+      </view>
     </view>
+
+    <canvas v-if="album.canvasVersion.value" :key="album.canvasVersion.value" canvas-id="receipt-album" id="receipt-album" class="receipt-canvas" :hidpi="false" :style="{width: album.canvasSize.value.width + 'px', height: album.canvasSize.value.height + 'px'}" :width="album.canvasSize.value.width" :height="album.canvasSize.value.height"/>
+    <app-dialog v-if="album.previewPath.value" title="保存小票图片" @close="album.previewPath.value = ''">
+      <text class="album-preview-note">长按图片保存，电脑可右键另存为。</text>
+      <image class="album-preview" :src="album.previewPath.value" mode="widthFix" :show-menu-by-longpress="true"/>
+    </app-dialog>
+    <app-confirm-dialog :controller="album.permissionDialog"/>
 
     <view v-if="isSavedView" class="result-actions">
       <view class="secondary-action flex-center" @tap="confirmDelete">删除收藏</view>
@@ -58,11 +69,16 @@
       <view class="secondary-action flex-center" @tap="endDining">结束用餐</view>
       <view class="primary-action flex-center" @tap="save">存到小票夹</view>
     </view>
+    <app-confirm-dialog :controller="confirmation"/>
   </initialization-gate>
   </view>
 </template>
 
 <script setup lang="ts">
+import DepthButton from '@/ui/components/depth-button/depth-button.vue'
+import AppConfirmDialog from '@/ui/components/app-confirm-dialog/app-confirm-dialog.vue'
+import {useAppDialog} from '@/ui/composables/useAppDialog'
+const confirmation = useAppDialog()
 import {useApplicationStore} from '@/ui/stores/useApplicationStore'
 import InitializationGate from '@/ui/components/initialization-gate/initialization-gate.vue'
 import {computed, ref, watch} from 'vue'
@@ -77,6 +93,8 @@ import {formatDateTime} from '@/ui/format/time'
 import {RoomInput, SaveRoomResultInput} from '@/contexts/dining/public'
 import {useRoomStore} from '@/ui/stores/useRoomStore'
 import {useActiveDining, useRoomConnection} from '@/ui/composables/useActiveDining'
+import {useReceiptAlbum} from '@/ui/composables/useReceiptAlbum'
+import AppDialog from '@/ui/components/app-dialog/app-dialog.vue'
 
 const applicationStore = useApplicationStore()
 const navigation = useRequired<BuffetNavigation>(BuffetNavigation)
@@ -92,12 +110,23 @@ const removeReceipt = useRequired<DeleteReceiptInput>(DeleteReceiptInput.Token)
 const receiptId = ref('')
 const finishing = ref(false)
 const isSavedView = computed(() => Boolean(receiptId.value))
+const printComplete = ref(false)
+const isPrinting = computed(() => applicationStore.ready && !isSavedView.value && diningStore.view.canFinish && !printComplete.value)
+function onPrintEnd(event: {animationName?: string; detail?: {animationName?: string}}) {
+  const name = event.animationName || event.detail?.animationName
+  if (!name || name.startsWith('receipt-feed')) printComplete.value = true
+}
 const isRoomView = computed(() => !isSavedView.value && Boolean(roomStore.view.snapshot))
 const roomEnded = computed(() => roomStore.view.snapshot?.status === 'ended')
 const isHost = computed(() => roomStore.view.snapshot?.hostId === roomStore.view.memberId)
 const savedReceipt = computed(() => collectionStore.receiptById(receiptId.value))
 const displayReceipt = computed(() => savedReceipt.value || diningStore.view.previewReceipt)
 const shortId = computed(() => displayReceipt.value.id.split('-').pop()?.toUpperCase() || 'DINING')
+const album = useReceiptAlbum(() => ({...displayReceipt.value, receiptId:shortId.value, dateTime:formatDateTime(displayReceipt.value.date)}))
+function saveToAlbum() {
+  if (!applicationStore.ready || isPrinting.value || (!savedReceipt.value && !diningStore.view.canFinish)) return
+  return album.save()
+}
 const goBack = () => runAction(() => navigation.back(isSavedView.value ? 'receipts' : 'menu'))
 function checkReceipt() {
   if (!applicationStore.ready) return
@@ -132,7 +161,7 @@ function finish(collectReceipt: boolean) {
 
 function confirmSingle(collect: boolean) {
   const restaurant = displayReceipt.value.restaurant
-  uni.showModal({title: '结算当前餐厅', content: '将结算「' + restaurant + '」，其他餐厅草稿将被丢弃。', success: result => {if (result.confirm) finish(collect)}})
+  confirmation.open({title: '结算当前餐厅', content: '将结算「' + restaurant + '」，其他餐厅草稿将被丢弃。', success: result => {if (result.confirm) finish(collect)}})
 }
 const endDining = () => confirmSingle(false)
 const save = () => confirmSingle(true)
@@ -142,7 +171,7 @@ function endRoom() {
   const expectedRevision = roomStore.view.snapshot?.revision
   const restaurantId = diningStore.view.session.restaurantId
   const restaurantName = displayReceipt.value.restaurant
-  uni.showModal({title: '结束整桌用餐', content: '仅结算「' + restaurantName + '」，待选菜品会计入结果，其他餐厅草稿将被丢弃。结束后每人独立选择是否收藏。', success: result => {
+  confirmation.open({title: '结束整桌用餐', content: '仅结算「' + restaurantName + '」，待选菜品会计入结果，其他餐厅草稿将被丢弃。结束后每人独立选择是否收藏。', success: result => {
     if (result.confirm) void runAction(async () => {
       finishing.value = true
       try {await roomInput.execute({command: 'end', params: {expectedRevision, restaurantId}})} finally {finishing.value = false}
@@ -163,7 +192,7 @@ function finishShared(collectReceipt: boolean) {
 }
 
 function confirmDelete() {
-  uni.showModal({
+  confirmation.open({
     title: '删除收藏', content: '仅删除收藏的小票，点餐记录仍然保留。', success: result => {
       if (result.confirm) void runAction(async () => {
         removeReceipt.execute({receiptId: receiptId.value});
@@ -175,6 +204,9 @@ function confirmDelete() {
 </script>
 
 <style scoped>
+.receipt-canvas {position:fixed;left:-10000px;top:0;pointer-events:none}
+.album-preview-note {display:block;margin-bottom:24rpx;color:#946e4c;font-size:26rpx;line-height:1.7}
+.album-preview {display:block;width:100%}
 .room-result-note {display:block;margin:24rpx 32rpx;color:#a66c38;font-size:26rpx;text-align:center}
 .result-page {
   min-height: 100vh;
@@ -183,8 +215,29 @@ function confirmDelete() {
   box-sizing: border-box;
 }
 
-.printer {
+.receipt-stage {
   margin: 6rpx 22rpx 0;
+}
+
+.receipt-output {
+  overflow: hidden;
+  padding-bottom: 18rpx;
+}
+
+.is-feeding :deep(.receipt) {
+  animation: receipt-feed 1.5s cubic-bezier(.2, .55, .45, 1) both;
+}
+
+.saved-receipt {margin-top: 40rpx}
+.saved-receipt .receipt-output {overflow: visible}
+
+@keyframes receipt-feed {
+  from {transform: translateY(calc(-100% - 30rpx))}
+  to {transform: translateY(0)}
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-feeding :deep(.receipt) {animation-duration: 1ms}
 }
 
 .printer-shell {
@@ -268,7 +321,6 @@ function confirmDelete() {
   border: 2rpx solid #ff9c72;
   border-radius: 16rpx;
   background: #ff7340;
-  box-shadow: 0 8rpx 0 #aaa299, 0 14rpx 18rpx rgba(0, 0, 0, .16);
   flex: 0 0 92rpx;
   box-sizing: border-box;
 }

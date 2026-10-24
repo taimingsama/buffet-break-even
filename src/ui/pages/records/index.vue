@@ -15,7 +15,7 @@
           </view>
           <view class="round-count">
             <text>{{ item.rounds.length }} 轮</text>
-            <text class="chevron">⌄</text>
+            <text class="chevron">◀</text>
           </view>
         </view>
         <view v-if="expandedRecordId === item.id" class="record-details">
@@ -137,19 +137,20 @@ const openDetail = (id: string) => runAction(() => navigation.toRecord(id))
   color: #9a887a;
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 30rpx;
   font-size: 24rpx;
   font-weight: 800;
 }
 
 .chevron {
-  font-size: 34rpx;
+  display: inline-block;
+  font-size: 35rpx;
   transform: rotate(0);
   transition: transform .2s ease;
 }
 
 .record-card.expanded .chevron {
-  transform: rotate(180deg);
+  transform: rotate(-90deg);
 }
 
 .record-details {

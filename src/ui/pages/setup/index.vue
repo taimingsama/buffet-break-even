@@ -4,30 +4,29 @@
     <view class="hero-copy">
       <text class="hero-title">自助餐回本神器</text>
       <text class="hero-subtitle">准备吃垮老板！</text>
-      <view class="dots flex-center">
-        <view v-for="(kind, index) in cuisineTypes" :key="kind.id" class="dot" :class="{active: typeId === kind.id}" @tap="drum.choose(index)"/>
-      </view>
     </view>
 
     <view class="mode-stage flex-center" :class="{'is-dragging': drum.dragging.value}"
           @touchstart="drum.begin" @touchmove.stop.prevent="drum.move" @touchend="drum.end" @touchcancel="drum.end"
           @mousedown="drum.begin" @mousemove="drum.move" @mouseup="drum.end" @mouseleave="drum.end">
+      <view class="dots flex-center" @touchstart.stop @mousedown.stop>
+        <view v-for="(kind, index) in cuisineTypes" :key="kind.id" class="dot" :class="{active: drum.highlightedIndex.value === index}" @tap.stop="drum.choose(index)"/>
+      </view>
       <view class="mode-drum" :style="{transform: drum.rotation.value}">
         <view v-for="(kind, index) in cuisineTypes" :key="kind.id" class="mode-card flex-center" :class="'tone-' + kind.id"
               :style="{transform: 'rotateY(' + index * 360 / cuisineTypes.length + 'deg) translateZ(var(--drum-radius)) rotateY(' + (drum.position.value - index) * 360 / cuisineTypes.length + 'deg)'}"
               @tap="drum.choose(index)">
-          <text class="mode-emoji">{{ kind.emoji }}</text>
+          <text class="mode-emoji" :class="{'is-floating': drum.highlightedIndex.value === index}">{{ kind.emoji }}</text>
           <text class="mode-name">{{ kind.name }}</text>
-          <text v-if="kind.id !== 'creator' && kind.id !== 'my-restaurants'" class="mode-note">开始后切换餐厅，分别点单</text>
         </view>
       </view>
-      <text class="drum-hint">‹　左右滑动，选择餐厅种类　›</text>
     </view>
+    <text class="drum-hint">‹　左右滑动，选择餐厅种类　›</text>
 
-    <view v-if="typeId === 'creator'" class="setup-panel entry-panel">
+    <view v-if="panelTypeId === 'creator'" class="setup-panel entry-panel">
       <text class="entry-title">创建自己的自助餐厅</text>
       <text class="entry-copy">添加菜品、填写参考价值，保存后会出现在「我的餐厅」。</text>
-      <view class="mode-button deep flex-center entry-button" @tap="editMenus">开始创建餐厅</view>
+      <depth-button class="mode-button deep entry-button" @click="editMenus">开始创建餐厅</depth-button>
     </view>
     <view v-else class="setup-panel">
       <view class="price-label">
@@ -39,15 +38,17 @@
         <input v-model="ticketInput" type="digit" placeholder="输入总价" placeholder-style="color: #8f8d8a;"/>
       </view>
       <view class="mode-actions">
-        <view class="mode-button deep flex-center" @tap="start('单人')">🚀 单人模式</view>
-        <view class="mode-button flex-center" @tap="openRoom">👥 多人模式</view>
+        <depth-button class="mode-button deep" @click="start('单人')">🚀 单人模式</depth-button>
+        <depth-button class="mode-button" @click="openRoom">👥 多人模式</depth-button>
       </view>
     </view>
     <app-dialog v-if="showRoomModal" :title="pendingEntry ? '切换用餐' : joining ? '加入房间' : '一起吃回本'" @close="closeRoomModal">
       <template v-if="pendingEntry">
         <text class="room-dialog-note">切换会清空当前单人待选和轮次；原多人房间仍可由其他成员继续。</text>
-        <button :hover-stay-time="0" class="room-dialog-primary" :disabled="starting" @tap="enterRoom(pendingEntry, true)">确认切换</button>
-        <button :hover-stay-time="0" class="room-dialog-secondary" :disabled="starting" @tap="pendingEntry = null">返回</button>
+        <view class="switch-actions">
+          <button :hover-stay-time="0" class="room-dialog-secondary" :disabled="starting" @tap="pendingEntry = null">取消</button>
+          <button :hover-stay-time="0" class="room-dialog-primary" :disabled="starting" @tap="enterRoom(pendingEntry, true)">确定</button>
+        </view>
       </template>
       <template v-else-if="!joining">
         <text class="room-dialog-note">创建房间将使用首页门票 ¥{{ ticketInput }}，昵称可在「我的」中设置。</text>
@@ -64,11 +65,16 @@
         <button :hover-stay-time="0" class="room-dialog-secondary" :disabled="starting" @tap="joining = false">返回</button>
       </template>
     </app-dialog>
+    <app-confirm-dialog :controller="confirmation"/>
   </initialization-gate>
   </view>
 </template>
 
 <script setup lang="ts">
+import DepthButton from '@/ui/components/depth-button/depth-button.vue'
+import AppConfirmDialog from '@/ui/components/app-confirm-dialog/app-confirm-dialog.vue'
+import {useAppDialog} from '@/ui/composables/useAppDialog'
+const confirmation = useAppDialog()
 import InitializationGate from '@/ui/components/initialization-gate/initialization-gate.vue'
 import {computed, ref} from 'vue'
 import {onLoad} from '@dcloudio/uni-app'
@@ -94,8 +100,8 @@ const getCatalog = useRequired<GetCatalogInput>(GetCatalogInput.Token)
 const cuisineTypes = (getCatalog.execute({typeId: 'sukiyaki'}).types || []).map(t => t.id === 'custom' ? {id:'creator',name:'创造者模式',emoji:'✏️'} : t)
 cuisineTypes.push({id:'my-restaurants',name:'我的餐厅',emoji:'👨‍🍳'})
 const typeId = ref('sukiyaki')
-const selectedType = computed(() => cuisineTypes.find(t => t.id === typeId.value))
-const drum = useCuisineDrum(cuisineTypes.map(t => t.id), typeId, uni.getSystemInfoSync().windowWidth || 375)
+const drum = useCuisineDrum(cuisineTypes.map(t => t.id), typeId, () => uni.getSystemInfoSync().windowWidth || 375)
+const panelTypeId = computed(() => cuisineTypes[drum.highlightedIndex.value]?.id || typeId.value)
 const selectedRestaurantId = ref(''), selectedRestaurantName = ref('')
 const editMenus = () => runAction(() => navigation.open('creator'))
 const openMyRestaurants = () => {typeId.value = 'my-restaurants'}
@@ -175,7 +181,7 @@ function start(mode: string) {
     }
   })
   if (roomStore.view.snapshot) {
-    uni.showModal({title: '离开多人用餐', content: '开始单人用餐会离开当前房间，其他成员可以继续用餐。', success: result => {
+    confirmation.open({title: '离开多人用餐', content: '开始单人用餐会离开当前房间，其他成员可以继续用餐。', success: result => {
       if (result.confirm) void submit(true)
       else if (result.cancel) void runAction(() => navigation.open('menu'))
     }})
@@ -184,7 +190,7 @@ function start(mode: string) {
       void submit(true)
       return
     }
-    uni.showModal({
+    confirmation.open({
       title: '已有进行中的用餐', content: '重新开始会清空当前待选和轮次。取消可继续当前用餐。',
       confirmText: '重新开始', cancelText: '继续用餐',
       success: result => {
@@ -196,11 +202,13 @@ function start(mode: string) {
 </script>
 
 <style scoped>
+.switch-actions {display:flex;gap:20rpx;margin-top:32rpx}
+.switch-actions button {flex:1;min-width:0;margin:0;padding:0 12rpx}
 .entry-title {display:block;font-size:34rpx;font-weight:900;color:#56340e}.entry-copy {display:block;margin-top:var(--entry-content-gap);font-size:26rpx;line-height:1.8;color:#946511}.entry-panel {--entry-content-gap:36rpx;display:flex;flex-direction:column}.entry-panel .entry-button {margin-top:var(--entry-content-gap);width:100%;flex:0 0 104rpx}
 .custom-edit {margin:24rpx 0 0;padding:0 24rpx;line-height:64rpx;background:#ffffffdd;color:#78597a;border-radius:28rpx;font-size:24rpx}
 .room-dialog-note {display:block;font-size:27rpx;line-height:1.8;color:#9a7d65;margin-bottom:24rpx}
-.room-dialog-primary,.room-dialog-secondary {margin-top:20rpx;border-radius:26rpx;font-size:30rpx;font-weight:800}
-.room-dialog-primary {background:#ff6331;color:white}.room-dialog-secondary {background:#fff0dd;color:#b66d34}
+.room-dialog-primary,.room-dialog-secondary,.room-dialog-secondary[disabled] {margin-top:20rpx;--button-radius:26rpx;font-size:30rpx;font-weight:800}
+.room-dialog-primary,.room-dialog-primary[disabled] {background:#ff6331;color:white}.room-dialog-secondary {background:#fff0dd;color:#b66d34}
 .room-code-input {height:100rpx;box-sizing:border-box;background:white;border:3rpx solid #eadabd;border-radius:24rpx;text-align:center;font-size:42rpx;letter-spacing:10rpx}
 .setup-page {
   --setup-panel-height: 530rpx;
@@ -246,7 +254,9 @@ function start(mode: string) {
 
 .dots {
   gap: 18rpx;
-  margin-top: 28rpx;
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 3;
 }
 
 .dot {
@@ -263,9 +273,11 @@ function start(mode: string) {
 
 .mode-stage {
   --drum-radius: 380rpx;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
-  margin-top: 24rpx;
+  flex-direction: column;
+  justify-content: center;
+  gap: 24rpx;
   position: relative;
   overflow: hidden;
   perspective: 1200rpx;
@@ -277,8 +289,10 @@ function start(mode: string) {
 .mode-stage.is-dragging {cursor: grabbing}
 .mode-drum {
   width: 430rpx;
-  height: calc(100% - 80rpx);
-  max-height: 600rpx;
+  height: 600rpx;
+  max-height: calc(100% - 30rpx);
+  flex: 0 1 600rpx;
+  min-height: 0;
   position: relative;
   transform-style: preserve-3d;
   transition: transform 420ms cubic-bezier(.22,.75,.24,1);
@@ -286,10 +300,11 @@ function start(mode: string) {
 .is-dragging .mode-drum,
 .is-dragging .mode-card {transition: none}
 .drum-hint {
-  position: absolute;
-  bottom: 4rpx;
-  left: 0;
-  right: 0;
+  display: block;
+  flex: 0 0 auto;
+  margin-bottom: 24rpx;
+  width: 100%;
+  line-height: 32rpx;
   text-align: center;
   font-size: 23rpx;
   color: #ac7546;
@@ -298,7 +313,8 @@ function start(mode: string) {
 
 .mode-card {
   width: 100%;
-  height: 100%;
+  height: 600rpx;
+  max-height: 100%;
   border-radius: 64rpx;
   background: linear-gradient(145deg, #a9e9d5, #6fc5ad);
   border: 8rpx solid rgba(255, 255, 255, .25);
@@ -321,7 +337,17 @@ function start(mode: string) {
 .tone-pizza {background:linear-gradient(145deg,#edce80,#d4a03d)}
 
 .mode-emoji {
+  display: inline-block;
   font-size: 96rpx;
+}
+
+.mode-emoji.is-floating {animation: emoji-float 2.4s ease-in-out infinite}
+@keyframes emoji-float {
+  0%, 100% {transform: translateY(0)}
+  50% {transform: translateY(-12rpx)}
+}
+@media (prefers-reduced-motion: reduce) {
+  .mode-emoji.is-floating {animation: none}
 }
 
 .mode-name {
@@ -330,20 +356,10 @@ function start(mode: string) {
   margin-top: 24rpx;
 }
 
-.mode-note {
-  font-size: 24rpx;
-  opacity: .9;
-  margin-top: 16rpx;
-  max-width: 340rpx;
-  text-align: center;
-  line-height: 1.6;
-}
-
 .setup-panel {
   height: calc(var(--setup-panel-height) + env(safe-area-inset-bottom));
   box-sizing: border-box;
   flex: 0 0 auto;
-  margin-top: 24rpx;
   padding: 36rpx 48rpx calc(48rpx + env(safe-area-inset-bottom));
   border-radius: 64rpx 64rpx 0 0;
   background: #fffefa;
@@ -396,7 +412,6 @@ function start(mode: string) {
   border-radius: 44rpx;
   color: white;
   background: linear-gradient(145deg, #ff8b00, #ff5c16);
-  box-shadow: 0 14rpx 0 #a53700, 0 26rpx 32rpx rgba(158, 64, 8, .2);
   font-size: 32rpx;
   font-weight: 900;
   text-decoration: none;
@@ -411,10 +426,8 @@ function start(mode: string) {
   .entry-panel .entry-button {flex-basis:88rpx}
   .hero-title {font-size:48rpx}
   .hero-subtitle {font-size:28rpx;margin-top:16rpx}
-  .dots {margin-top:20rpx}
   .mode-emoji {font-size:64rpx}
   .mode-name {font-size:42rpx;margin-top:12rpx}
-  .mode-note {font-size:20rpx;margin-top:8rpx}
   .custom-edit {margin-top:12rpx;line-height:48rpx;font-size:22rpx}
   .setup-panel {padding:28rpx 40rpx calc(40rpx + env(safe-area-inset-bottom))}
   .price-input-wrap {height:90rpx;margin-top:20rpx}

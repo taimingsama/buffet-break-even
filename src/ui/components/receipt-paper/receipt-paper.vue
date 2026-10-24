@@ -1,5 +1,8 @@
 <template>
-  <view class="receipt">
+  <view class="receipt" @touchstart="saveGesture.start" @longpress.stop="saveGesture.longPress" @touchend="saveGesture.end" @touchcancel="saveGesture.cancel">
+    <view v-if="detached" class="receipt-teeth receipt-teeth-top">
+      <view v-for="tooth in 28" :key="tooth"/>
+    </view>
     <text class="receipt-title">PAGER MESSAGE</text>
     <text v-if="restaurant" class="receipt-restaurant">{{ restaurant }}{{ typeName ? ' · ' + typeName : '' }}</text>
     <view class="receipt-dash"/>
@@ -46,12 +49,14 @@
 
 <script setup lang="ts">
 import {computed} from 'vue'
+import {useLongPressAction} from '@/ui/composables/useLongPressAction'
 import type {ReceiptLineView} from '@/presentation/receipt/ReceiptLineView'
 import {formatPrice} from '@/utils/format'
 import type {BreakEvenView} from '@/presentation/shared/BreakEvenView'
 
 const props = defineProps<{
   restaurant?: string
+  detached?: boolean
   typeName?: string
   participants?: readonly string[]
   receiptId: string
@@ -61,6 +66,8 @@ const props = defineProps<{
   lines: ReceiptLineView[]
   result: BreakEvenView
 }>()
+const emit = defineEmits<{(event: 'save-image'): void}>()
+const saveGesture = useLongPressAction(() => emit('save-image'))
 
 const result = computed(() => props.result)
 const differenceText = computed(() => `${result.value.isBreakEven ? '+' : '−'}¥${Math.abs(result.value.difference).toFixed(0)}`)
@@ -191,7 +198,8 @@ const resultCopy = computed(() => result.value.isBreakEven
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -18rpx;
+  /* Overlap by one CSS pixel to cover fractional rpx rounding at any pixel ratio. */
+  bottom: calc(1px - 18rpx);
   display: flex;
   overflow: hidden;
 }
@@ -203,5 +211,11 @@ const resultCopy = computed(() => result.value.isBreakEven
   border-right: 12rpx solid transparent;
   border-top: 18rpx solid #fbfaf7;
   flex: 1 0 24rpx;
+}
+
+.receipt-teeth-top {
+  top: calc(1px - 18rpx);
+  bottom: auto;
+  transform: rotate(180deg);
 }
 </style>
